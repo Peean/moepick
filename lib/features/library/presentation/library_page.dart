@@ -34,90 +34,133 @@ import 'widgets/series_card.dart';
 
 /// Home screen: a grid of every series in the library.
 /// 主页：库中全部系列的网格。
-class LibraryPage extends ConsumerWidget {
+///
+/// Also owns the "double back to exit" behaviour: on the home (root) route,
+/// the first back press only shows a toast, and the app exits on the second
+/// press within the grace window. This prevents accidental exits from a stray
+/// back gesture.
+///
+/// 同时承载「双击返回退出」行为：在主页（根路由）上，第一次按返回只弹提示，
+/// 在宽限窗口内再次按下才退出应用，避免误触返回导致直接退出。
+class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LibraryPage> createState() => _LibraryPageState();
+}
+
+class _LibraryPageState extends ConsumerState<LibraryPage> {
+  DateTime? _lastBackPressed;
+
+  @override
+  Widget build(BuildContext context) {
     final List<Series> seriesList = ref.watch(seriesListProvider);
     final int stickerCount = ref.watch(stickerListProvider).length;
 
-    return MoeScaffold(
-      appBar: AppBar(
-        title: const Text('拾萌'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: '搜索',
-            icon: const Icon(Icons.search),
-            onPressed: () => context.go(RoutePaths.search),
-          ),
-          IconButton(
-            tooltip: '设置',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.go(RoutePaths.settings),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _createSeries(context, ref),
-        icon: const Icon(Icons.add),
-        label: const Text('新建系列'),
-      ),
-      body: seriesList.isEmpty
-          ? EmptyState(
-              icon: Icons.collections_outlined,
-              title: '还没有系列',
-              message: '创建一个系列来收纳你的表情包。\n'
-                  '系列可以有自己的分类、标签和备注，'
-                  '其中的表情包会自动继承。',
-              action: ElevatedButton.icon(
-                onPressed: () => _createSeries(context, ref),
-                icon: const Icon(Icons.add),
-                label: const Text('新建系列'),
-              ),
-            )
-          : CustomScrollView(
-              slivers: <Widget>[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                    child: Text(
-                      '${seriesList.length} 个系列 · $stickerCount 个表情包',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.6),
-                          ),
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                  sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 220,
-                      mainAxisSpacing: 14,
-                      crossAxisSpacing: 14,
-                      childAspectRatio: 0.82,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (BuildContext context, int index) {
-                        final Series series = seriesList[index];
-                        return SeriesCard(
-                          series: series,
-                          onTap: () => context
-                              .push(RoutePaths.seriesOf(series.id)),
-                        );
-                      },
-                      childCount: seriesList.length,
-                    ),
-                  ),
-                ),
-              ],
+    // WillPopScope is the Flutter 3.0 mechanism for intercepting the system
+    // back button (PopScope only arrives in 3.12). It fires on the root route
+    // because the home page is the bottom of the navigation stack.
+    // WillPopScope 是 Flutter 3.0 下拦截系统返回键的机制（PopScope 到 3.12 才有）。
+    // 由于主页位于导航栈底部，它在根路由上生效。
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: MoeScaffold(
+        appBar: AppBar(
+          title: const Text('拾萌'),
+          actions: <Widget>[
+            IconButton(
+              tooltip: '搜索',
+              icon: const Icon(Icons.search),
+              onPressed: () => context.go(RoutePaths.search),
             ),
+            IconButton(
+              tooltip: '设置',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => context.go(RoutePaths.settings),
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _createSeries(context, ref),
+          icon: const Icon(Icons.add),
+          label: const Text('新建系列'),
+        ),
+        body: seriesList.isEmpty
+            ? EmptyState(
+                icon: Icons.collections_outlined,
+                title: '还没有系列',
+                message: '创建一个系列来收纳你的表情包。\n'
+                    '系列可以有自己的分类、标签和备注，'
+                    '其中的表情包会自动继承。',
+                action: ElevatedButton.icon(
+                  onPressed: () => _createSeries(context, ref),
+                  icon: const Icon(Icons.add),
+                  label: const Text('新建系列'),
+                ),
+              )
+            : CustomScrollView(
+                slivers: <Widget>[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Text(
+                        '${seriesList.length} 个系列 · $stickerCount 个表情包',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withOpacity(0.6),
+                            ),
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 220,
+                        mainAxisSpacing: 14,
+                        crossAxisSpacing: 14,
+                        childAspectRatio: 0.82,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (BuildContext context, int index) {
+                          final Series series = seriesList[index];
+                          return SeriesCard(
+                            series: series,
+                            onTap: () => context
+                                .push(RoutePaths.seriesOf(series.id)),
+                          );
+                        },
+                        childCount: seriesList.length,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
+  }
+
+  /// Return true to allow the back event to pop the app.
+  /// 返回 true 表示允许返回事件退出应用。
+  Future<bool> _onWillPop() async {
+    final DateTime now = DateTime.now();
+    final bool withinGrace =
+        _lastBackPressed != null &&
+        now.difference(_lastBackPressed!) <
+            const Duration(seconds: 2);
+
+    if (withinGrace) {
+      return true; // 第二次返回，放行退出
+    }
+
+    _lastBackPressed = now;
+    if (contextIsAlive(context)) {
+      showToast(context, '再次返回退出应用');
+    }
+    return false; // 第一次返回，拦截并提示
   }
 
   /// Prompt for a name, then create the series and open it.
@@ -129,11 +172,6 @@ class LibraryPage extends ConsumerWidget {
     final String id = await ref
         .read(libraryActionsProvider)
         .createSeries(name: name.trim());
-    // Flutter 3.0's BuildContext has no `mounted` getter, so guard on the
-    // render object, which is non-null for exactly as long as the context is
-    // mounted in the tree.
-    // Flutter 3.0 的 BuildContext 没有 `mounted` getter，因此改以 render object
-    // 判断：它在 context 挂载于组件树期间恒为非 null。
     // `contextIsAlive` flips to false the moment the element is deactivated, so the
     // context below is provably live. The analyzer cannot see through the helper
     // (it only special-cases the literal name `mounted`), hence the targeted ignore.

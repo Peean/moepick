@@ -25,6 +25,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/utils/id_utils.dart';
 import '../../../core/utils/path_utils.dart';
@@ -93,6 +94,11 @@ class StickerDetailPage extends ConsumerWidget {
           onPressed: () => context.pop(),
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: '分享',
+            icon: const Icon(Icons.share_outlined),
+            onPressed: () => _share(context, sticker),
+          ),
           IconButton(
             tooltip: '编辑',
             icon: const Icon(Icons.edit_outlined),
@@ -220,6 +226,35 @@ class StickerDetailPage extends ConsumerWidget {
   }
 
   static String _two(int value) => value.toString().padLeft(2, '0');
+
+  /// Share the sticker's image through the platform share sheet.
+  /// 通过系统分享面板分享表情包图片。
+  ///
+  /// Shares the original image file (not the thumbnail), which is what the
+  /// recipient expects to receive in a chat or social app.
+  ///
+  /// 分享的是原图文件（而非缩略图），这正是对方在聊天或社交应用里期望收到的东西。
+  Future<void> _share(BuildContext context, Sticker sticker) async {
+    final String absolute = PathUtils.absoluteSync(sticker.relativePath);
+    final File file = File(absolute);
+    if (!await file.exists()) {
+      if (contextIsAlive(context)) {
+        showToast(context, '图片文件已丢失，无法分享', isError: true);
+      }
+      return;
+    }
+
+    try {
+      await Share.shareXFiles(
+        <XFile>[XFile(absolute)],
+        text: sticker.name.isNotEmpty ? sticker.name : null,
+      );
+    } catch (e) {
+      if (contextIsAlive(context)) {
+        showToast(context, '分享失败：$e', isError: true);
+      }
+    }
+  }
 
   Future<void> _delete(
     BuildContext context,

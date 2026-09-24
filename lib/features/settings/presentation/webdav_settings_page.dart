@@ -92,7 +92,10 @@ class _WebDavSettingsPageState extends ConsumerState<WebDavSettingsPage> {
               const SizedBox(height: 12),
               TextField(
                 controller: _usernameController,
-                decoration: const InputDecoration(labelText: '用户名'),
+                decoration: const InputDecoration(
+                  labelText: '用户名',
+                  hintText: '坚果云为注册邮箱',
+                ),
                 autocorrect: false,
               ),
               const SizedBox(height: 12),
@@ -100,6 +103,7 @@ class _WebDavSettingsPageState extends ConsumerState<WebDavSettingsPage> {
                 controller: _passwordController,
                 decoration: InputDecoration(
                   labelText: '密码 / 应用密码',
+                  hintText: '坚果云需生成应用密码，非登录密码',
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword

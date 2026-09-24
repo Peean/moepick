@@ -380,6 +380,22 @@ class WebDavSyncService {
       password: c.password,
       debug: false,
     );
+
+    // Pre-emptively send Basic auth. The library defaults to a "no auth, then
+    // retry on 401 challenge" flow, which breaks on servers that return a 401
+    // whose `www-authenticate` header it cannot parse (or that simply do not
+    // send one) — the symptom is a spurious "username or password wrong" for
+    // perfectly correct credentials. Sending the header up front removes the
+    // fragile challenge dance entirely.
+    //
+    // 预先发送 Basic 认证。该库默认走「先不带认证、收到 401 挑战再重试」的流程，
+    // 遇到返回无法解析的 `www-authenticate` 头（或干脆不返回）的服务器就会失败——
+    // 表现为凭据明明正确却报「用户名或密码错误」。提前带上认证头即可彻底绕开
+    // 这套脆弱的挑战流程。
+    if (c.username.isNotEmpty) {
+      client.auth = webdav.BasicAuth(user: c.username, pwd: c.password);
+    }
+
     // Explicit timeouts: the library's defaults are long enough that a wrong
     // host would make the UI appear to hang rather than report a failure.
     // 显式超时：该库的默认值长到足以让错误的主机地址表现为界面卡死，
@@ -415,7 +431,9 @@ class WebDavSyncService {
     if (error is AppException) return error.message;
     final String text = error.toString();
     if (text.contains('401') || text.contains('Unauthorized')) {
-      return '认证失败，请检查用户名和密码';
+      return '认证失败：请确认用户名与「应用密码」正确。\n'
+          '坚果云需在「账户信息 → 安全选项」里生成应用密码，'
+          '而不是使用登录密码。';
     }
     if (text.contains('404')) {
       return '服务器路径不存在，请检查地址是否正确';
