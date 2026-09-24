@@ -19,6 +19,7 @@ class RoutePaths {
   static const String settingsTheme = '/settings/theme';
   static const String settingsBackground = '/settings/background';
   static const String settingsTaxonomy = '/settings/taxonomy';
+  static const String settingsTrash = '/settings/trash';
   static const String settingsBackup = '/settings/backup';
   static const String settingsWebdav = '/settings/webdav';
   static const String settingsAbout = '/settings/about';

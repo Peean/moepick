@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/state/data_version.dart';
 import '../../../core/storage/file_store.dart';
 import '../../../core/utils/date_utils.dart';
@@ -181,6 +182,157 @@ class LibraryActions {
     await _refreshTagUsage();
     _bump();
   }
+
+  /// Soft-delete a batch of stickers (multi-select flow).
+  /// 批量软删除表情包（多选流程）。
+  Future<int> deleteStickers(List<Sticker> stickers) async {
+    if (stickers.isEmpty) return 0;
+    final StickerRepository repo = _ref.read(stickerRepositoryProvider);
+    final Set<String> seriesIds = <String>{};
+    for (final Sticker s in stickers) {
+      await repo.softDelete(s.id);
+      seriesIds.add(s.seriesId);
+    }
+    for (final String seriesId in seriesIds) {
+      await _syncSeriesCount(seriesId);
+    }
+    await _refreshTagUsage();
+    _bump();
+    return stickers.length;
+  }
+
+  // ------------------------------------------------------------------ 回收站
+
+  /// Undo a soft-delete for a batch of stickers.
+  /// 批量还原软删除的表情包。
+  Future<void> restoreStickers(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final StickerRepository repo = _ref.read(stickerRepositoryProvider);
+    final Map<String, Sticker> byId = <String, Sticker>{
+      for (final Sticker s in _allStickers()) s.id: s,
+    };
+    final Set<String> seriesIds = <String>{};
+    for (final String id in ids) {
+      final Sticker? s = byId[id];
+      if (s != null) seriesIds.add(s.seriesId);
+    }
+    await repo.restoreAll(ids);
+    for (final String seriesId in seriesIds) {
+      await _syncSeriesCount(seriesId);
+    }
+    await _refreshTagUsage();
+    _bump();
+  }
+
+  /// Physically remove stickers and their image files.
+  /// 物理移除表情包及其图片文件。
+  Future<void> purgeStickers(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final StickerRepository repo = _ref.read(stickerRepositoryProvider);
+    final FileStore files = _ref.read(fileStoreProvider);
+    final Map<String, Sticker> byId = <String, Sticker>{
+      for (final Sticker s in _allStickers()) s.id: s,
+    };
+    final Set<String> seriesIds = <String>{};
+
+    for (final String id in ids) {
+      final Sticker? s = byId[id];
+      if (s == null) continue;
+      seriesIds.add(s.seriesId);
+      // Best-effort file cleanup: losing a file must not block the record
+      // deletion, which is the part that matters for storage correctness.
+      // 尽力清理文件：删文件失败不应阻塞记录删除——后者才是存储正确性的关键。
+      try {
+        if (s.relativePath.isNotEmpty) await files.delete(s.relativePath);
+        final String? thumb = s.thumbPath;
+        if (thumb != null && thumb.isNotEmpty) await files.delete(thumb);
+      } catch (_) {}
+    }
+
+    await repo.purgeAll(ids);
+    for (final String seriesId in seriesIds) {
+      await _syncSeriesCount(seriesId);
+    }
+    await _refreshTagUsage();
+    _bump();
+  }
+
+  /// Restore a soft-deleted series together with its soft-deleted stickers.
+  /// 还原软删除的系列，并连带还原其下被软删除的表情包。
+  ///
+  /// Restoring only the parent would leave its children hidden forever (they
+  /// were soft-deleted alongside it), which reads as "restore lost my
+  /// stickers".
+  ///
+  /// 只还原父级会让子项永远不可见（它们是随父级一起被软删除的），
+  /// 在用户看来就是「还原之后表情包丢了」。
+  Future<void> restoreSeries(String seriesId) async {
+    await _ref.read(seriesRepositoryProvider).restore(seriesId);
+    final List<Sticker> children = _allStickers()
+        .where((Sticker s) => s.seriesId == seriesId && s.isDeleted)
+        .toList();
+    await _ref
+        .read(stickerRepositoryProvider)
+        .restoreAll(children.map((Sticker s) => s.id).toList());
+    await _syncSeriesCount(seriesId);
+    await _refreshTagUsage();
+    _bump();
+  }
+
+  /// Physically remove a series, its stickers and their files.
+  /// 物理移除系列、其表情包与对应文件。
+  Future<void> purgeSeries(String seriesId) async {
+    final FileStore files = _ref.read(fileStoreProvider);
+    final List<Sticker> children = _allStickers()
+        .where((Sticker s) => s.seriesId == seriesId)
+        .toList();
+
+    for (final Sticker s in children) {
+      try {
+        if (s.relativePath.isNotEmpty) await files.delete(s.relativePath);
+        final String? thumb = s.thumbPath;
+        if (thumb != null && thumb.isNotEmpty) await files.delete(thumb);
+      } catch (_) {}
+    }
+
+    await _ref
+        .read(stickerRepositoryProvider)
+        .purgeAll(children.map((Sticker s) => s.id).toList());
+    await _ref.read(seriesRepositoryProvider).purge(seriesId);
+    await _refreshTagUsage();
+    _bump();
+  }
+
+  /// Permanently remove everything soft-deleted more than [AppConstants.
+  /// trashRetention] ago. Called when the trash page opens.
+  /// 彻底清除软删除超过 [AppConstants.trashRetention] 的所有条目。
+  /// 在回收站页打开时调用。
+  Future<int> purgeExpired() async {
+    final DateTime cutoff =
+        DateUtils.nowUtc().subtract(AppConstants.trashRetention);
+    final List<Sticker> expiredStickers = _allStickers()
+        .where((Sticker s) => s.isDeleted && s.updatedAt.isBefore(cutoff))
+        .toList();
+    final List<Series> expiredSeries = _allSeries()
+        .where((Series s) => s.isDeleted && s.updatedAt.isBefore(cutoff))
+        .toList();
+
+    if (expiredStickers.isEmpty && expiredSeries.isEmpty) return 0;
+
+    await purgeStickers(expiredStickers.map((Sticker s) => s.id).toList());
+    for (final Series s in expiredSeries) {
+      await purgeSeries(s.id);
+    }
+    return expiredStickers.length + expiredSeries.length;
+  }
+
+  /// Live + deleted stickers, for trash/restore bookkeeping.
+  /// 存活与已删除的全部表情包，供回收站/还原逻辑使用。
+  List<Sticker> _allStickers() =>
+      _ref.read(stickerRepositoryProvider).getAllIncludingDeleted();
+
+  List<Series> _allSeries() =>
+      _ref.read(seriesRepositoryProvider).getAllIncludingDeleted();
 
   /// Recompute and store a series' sticker count.
   /// 重算并保存某系列的表情包计数。

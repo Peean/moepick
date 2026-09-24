@@ -87,8 +87,8 @@ class _BackupPageState extends ConsumerState<BackupPage> {
               const _Note(
                 text: '备份是普通的 zip 压缩包，内含 manifest.json 与图片文件，'
                     '不依赖任何云端服务。\n'
-                    '导出时会弹出系统文件管理器，'
-                    '你可以选择保存到任意文件夹。',
+                    '导出时会弹出系统文件管理器，你可以选择保存到任意文件夹；'
+                    '若该文件夹不允许写入，备份会自动改存到应用专属目录并提示实际路径。',
               ),
             ],
           ),
@@ -130,32 +130,45 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   }
 
   Future<void> _export(BackupScope scope) async {
+    // Ask first, then show the spinner: the platform dialog is the user's
+    // choice, and covering it with a modal overlay would be hostile.
+    // 先询问再显示进度：平台对话框属于用户的选择，
+    // 用模态遮罩盖住它是不友好的。
+    final SaveDestination? target =
+        await FileSaveService.chooseSaveDestination(
+      suggestedName: BackupService.suggestedFileName(scope),
+    );
+    if (target == null || !mounted) return;
+
     setState(() {
       _busy = true;
       _busyLabel = '正在打包…';
     });
 
     try {
-      final String? target = await FileSaveService.chooseSavePath(
-        suggestedName: BackupService.suggestedFileName(scope),
-      );
-      if (target == null) return;
-
       final HiveStore store = ref.read(hiveStoreProvider);
       final BackupService service = BackupService(store);
-      final BackupResult result =
-          await service.writeTo(target, scope: scope);
+      final BackupResult result = await service.writeTo(target, scope: scope);
 
       if (!mounted) return;
 
-      // The user already picked a concrete destination via the platform file
-      // manager, so just confirm where the file landed.
-      // 用户已通过系统文件管理器选定具体位置，因此只需确认文件落点。
-      showToast(
-        context,
-        '已导出到 ${result.path.split(Platform.pathSeparator).last}'
-        '（${_formatBytes(result.bytes)}）',
-      );
+      // Report where the file actually landed: when the chosen folder was not
+      // writable the archive goes to app storage instead, and the user has to
+      // be told rather than left to discover an empty folder.
+      // 如实报告文件最终落点：当所选文件夹不可写时，归档会改放应用存储，
+      // 必须告知用户，而不是让他对着空文件夹发懵。
+      final String size = _formatBytes(result.bytes);
+      if (result.usedFallback) {
+        showToast(
+          context,
+          '所选位置不可写，已改存到：${result.path}（$size）',
+        );
+      } else {
+        showToast(
+          context,
+          '已导出到 ${result.path.split(Platform.pathSeparator).last}（$size）',
+        );
+      }
     } catch (e) {
       if (mounted) showToast(context, '导出失败：$e', isError: true);
     } finally {

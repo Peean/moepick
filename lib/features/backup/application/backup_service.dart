@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/hive_boxes.dart';
 import '../../../core/error/app_exception.dart';
+import '../../../core/platform/file_save_service.dart';
 import '../../../core/storage/hive_store.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/hash_utils.dart';
@@ -42,13 +43,21 @@ class BackupResult {
     required this.entryCount,
     required this.imageCount,
     required this.scope,
+    this.usedFallback = false,
   });
 
+  /// Absolute path the archive was actually written to.
+  /// 归档实际写入的绝对路径。
   final String path;
   final int bytes;
   final int entryCount;
   final int imageCount;
   final BackupScope scope;
+
+  /// True when the user's chosen folder could not be written and the archive
+  /// was placed in an app-owned directory instead.
+  /// 为真时表示用户所选文件夹无法写入，归档改放在了应用自有目录。
+  final bool usedFallback;
 }
 
 /// Result of restoring a backup.
@@ -186,27 +195,35 @@ class BackupService {
     return Uint8List.fromList(encoded);
   }
 
-  /// Write a backup file to an absolute destination path.
-  /// 将备份文件写入绝对目标路径。
+  /// Write a backup file to a destination the user approved.
+  /// 将备份文件写入用户已批准的目标。
+  ///
+  /// The bytes are produced by [buildArchive] and handed to
+  /// [FileSaveService.writeBytes], which knows where the app is actually
+  /// allowed to write. Accepts a bare path too, so the desktop flow and the
+  /// older call sites keep working.
+  ///
+  /// 字节由 [buildArchive] 生成后交给 [FileSaveService.writeBytes]，
+  /// 由后者决定应用真正有权写入的位置。同时接受裸路径，
+  /// 以便桌面流程与既有调用点继续可用。
   Future<BackupResult> writeTo(
-    String destinationPath, {
+    SaveDestination destination, {
     required BackupScope scope,
   }) async {
     final Uint8List bytes = await buildArchive(scope: scope);
-    final File target = File(destinationPath);
-    await target.parent.create(recursive: true);
-    await target.writeAsBytes(bytes, flush: true);
+    final SaveOutcome outcome =
+        await FileSaveService.writeBytes(destination, bytes);
 
-    final int imageCount = scope == BackupScope.full
-        ? _collectAssetPaths().length
-        : 0;
+    final int imageCount =
+        scope == BackupScope.full ? _collectAssetPaths().length : 0;
 
     return BackupResult(
-      path: destinationPath,
+      path: outcome.path,
       bytes: bytes.length,
       entryCount: _totalRecordCount(),
       imageCount: imageCount,
       scope: scope,
+      usedFallback: outcome.usedFallback,
     );
   }
 

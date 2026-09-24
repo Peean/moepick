@@ -41,6 +41,13 @@ class AppConstants {
   /// 拖动模糊滑杆时实时预览的尺寸。
   static const int backgroundPreviewMaxSize = 256;
 
+  /// Sigma scale between the full-size blur cache and the 256px live preview:
+  /// blur radius scales roughly with image size, so the small preview uses a
+  /// proportionally smaller sigma to *look* the same.
+  /// 全尺寸模糊缓存与 256px 实时预览之间的 sigma 比例：
+  /// 模糊半径大致随图像尺寸缩放，因此小预览按比例缩小 sigma 以获得相同观感。
+  static const double backgroundPreviewScaleHint = 720 / 256;
+
   /// Debounce applied before auto-sync runs after a data change.
   /// 数据变更后触发自动同步的防抖时长。
   static const Duration syncDebounce = Duration(seconds: 20);

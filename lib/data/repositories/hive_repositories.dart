@@ -56,6 +56,19 @@ class HiveSeriesRepository implements SeriesRepository {
     );
   }
 
+  @override
+  Future<void> restore(String id) async {
+    final Series? existing = _box.get(id);
+    if (existing == null) return;
+    await _box.put(
+      id,
+      existing.copyWith(isDeleted: false, updatedAt: DateUtils.nowUtc()),
+    );
+  }
+
+  @override
+  Future<void> purge(String id) => _box.delete(id);
+
   /// Update the denormalised sticker count so the gallery grid need not load
   /// every sticker to render a badge.
   /// 更新冗余的表情包计数，使图库网格无需加载全部表情包即可渲染角标。
@@ -148,6 +161,21 @@ class HiveStickerRepository implements StickerRepository {
       existing.copyWith(isDeleted: true, updatedAt: DateUtils.nowUtc()),
     );
   }
+
+  @override
+  Future<void> restoreAll(List<String> ids) async {
+    final DateTime now = DateUtils.nowUtc();
+    final Map<String, Sticker> updates = <String, Sticker>{};
+    for (final String id in ids) {
+      final Sticker? existing = _box.get(id);
+      if (existing == null || !existing.isDeleted) continue;
+      updates[id] = existing.copyWith(isDeleted: false, updatedAt: now);
+    }
+    if (updates.isNotEmpty) await _box.putAll(updates);
+  }
+
+  @override
+  Future<void> purgeAll(List<String> ids) => _box.deleteAll(ids);
 
   @override
   Future<void> deleteBySeries(String seriesId) async {

@@ -34,6 +34,40 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
   /// 网格密度可由用户配置，因此每次构建展现代理而非缓存。
   bool _busy = false;
 
+  /// Multi-select mode, entered by long-pressing a tile.
+  /// 多选模式，由长按某个瓦片进入。
+  ///
+  /// Long-press used to quick-delete, which destroyed work with a single
+  /// clumsy gesture; deletion now lives behind an explicit confirm in the
+  /// selection bar.
+  ///
+  /// 长按过去是快速删除，一次误触就毁掉成果；
+  /// 现在删除收进多选栏中并需显式确认。
+  bool _selectionMode = false;
+  final Set<String> _selected = <String>{};
+
+  void _enterSelection(String stickerId) {
+    setState(() {
+      _selectionMode = true;
+      _selected.clear();
+      _selected.add(stickerId);
+    });
+  }
+
+  void _toggleSelection(String stickerId) {
+    setState(() {
+      if (!_selected.remove(stickerId)) _selected.add(stickerId);
+      if (_selected.isEmpty) _selectionMode = false;
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _selectionMode = false;
+      _selected.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final Series? series =
@@ -72,57 +106,93 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
 
     return MoeScaffold(
       appBar: AppBar(
-        title: Text(series.name),
+        title: Text(_selectionMode ? '已选择 ${_selected.length} 项' : series.name),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          icon: Icon(_selectionMode ? Icons.close : Icons.arrow_back),
+          onPressed: () {
+            if (_selectionMode) {
+              _exitSelection();
+            } else {
+              context.pop();
+            }
+          },
         ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: '编辑系列信息',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () =>
-                context.push(RoutePaths.seriesEditOf(series.id)),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (String value) {
-              if (value == 'delete') _deleteSeries(series);
-            },
-            itemBuilder: (BuildContext ctx) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
-                value: 'delete',
-                child: DestructiveMenuItem(
-                  icon: Icons.delete_outline,
-                  label: '删除系列',
+        actions: _selectionMode
+            ? <Widget>[
+                IconButton(
+                  tooltip: _selected.length == stickers.length
+                      ? '取消全选'
+                      : '全选',
+                  icon: const Icon(Icons.select_all_outlined),
+                  onPressed: () {
+                    setState(() {
+                      if (_selected.length == stickers.length) {
+                        _selected.clear();
+                      } else {
+                        _selected
+                          ..clear()
+                          ..addAll(stickers.map((Sticker s) => s.id));
+                      }
+                    });
+                  },
                 ),
-              ),
-            ],
-          ),
-        ],
+                IconButton(
+                  tooltip: '删除所选',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: _selected.isEmpty
+                      ? null
+                      : () => _deleteSelected(stickers),
+                ),
+              ]
+            : <Widget>[
+                IconButton(
+                  tooltip: '编辑系列信息',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () =>
+                      context.push(RoutePaths.seriesEditOf(series.id)),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (String value) {
+                    if (value == 'delete') _deleteSeries(series);
+                  },
+                  itemBuilder: (BuildContext ctx) => <PopupMenuEntry<String>>[
+                    const PopupMenuItem<String>(
+                      value: 'delete',
+                      child: DestructiveMenuItem(
+                        icon: Icons.delete_outline,
+                        label: '删除系列',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _busy ? null : () => _importStickers(series),
-        icon: _busy
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.add_photo_alternate_outlined),
-        label: Text(_busy ? '导入中' : '导入表情包'),
-      ),
+      floatingActionButton: _selectionMode
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _busy ? null : () => _importStickers(series),
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.add_photo_alternate_outlined),
+              label: Text(_busy ? '导入中' : '导入表情包'),
+            ),
       body: CustomScrollView(
         slivers: <Widget>[
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: InheritanceSummary(
-                series: series,
-                categoryById: categoryById,
-                tagById: tagById,
+          if (!_selectionMode)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: InheritanceSummary(
+                  series: series,
+                  categoryById: categoryById,
+                  tagById: tagById,
+                ),
               ),
             ),
-          ),
 
           if (stickers.isEmpty)
             SliverFillRemaining(
@@ -153,7 +223,7 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
                     ),
                     const Spacer(),
                     Text(
-                      '点按查看详情，长按快速删除',
+                      _selectionMode ? '点按选择或取消，选完点右上角删除' : '点按查看详情，长按进入多选',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context)
                                 .colorScheme
@@ -169,9 +239,21 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
               sliver: _StickerGrid(
                 stickers: stickers,
-                onOpen: (Sticker s) =>
-                    context.push(RoutePaths.stickerOf(s.id)),
-                onLongPress: _confirmDeleteSticker,
+                selectedIds: _selectionMode ? _selected : null,
+                onOpen: (Sticker s) {
+                  if (_selectionMode) {
+                    _toggleSelection(s.id);
+                  } else {
+                    context.push(RoutePaths.stickerOf(s.id));
+                  }
+                },
+                onLongPress: (Sticker s) {
+                  if (_selectionMode) {
+                    _toggleSelection(s.id);
+                  } else {
+                    _enterSelection(s.id);
+                  }
+                },
               ),
             ),
           ],
@@ -219,18 +301,26 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
     return parts.join('，');
   }
 
-  Future<void> _confirmDeleteSticker(Sticker sticker) async {
+  Future<void> _deleteSelected(List<Sticker> stickers) async {
+    final int count = _selected.length;
     final bool ok = await confirm(
       context,
-      title: '删除表情包',
-      message: '「${sticker.name.isEmpty ? "这张表情包" : sticker.name}」'
-          '将被移入回收站。',
+      title: '删除所选表情包',
+      message: '选中的 $count 个表情包将被移入回收站，'
+          '可在「设置 → 回收站」中恢复。',
       confirmLabel: '删除',
       destructive: true,
     );
     if (!ok) return;
-    await ref.read(libraryActionsProvider).deleteSticker(sticker);
-    if (mounted) showToast(context, '已移入回收站');
+
+    final List<Sticker> chosen = stickers
+        .where((Sticker s) => _selected.contains(s.id))
+        .toList();
+    await ref.read(libraryActionsProvider).deleteStickers(chosen);
+    if (mounted) {
+      _exitSelection();
+      showToast(context, '已将 $count 个表情包移入回收站');
+    }
   }
 
   Future<void> _deleteSeries(Series series) async {
@@ -266,11 +356,17 @@ class _StickerGrid extends ConsumerWidget {
     required this.stickers,
     required this.onOpen,
     required this.onLongPress,
+    this.selectedIds,
   });
 
   final List<Sticker> stickers;
   final ValueChanged<Sticker> onOpen;
   final ValueChanged<Sticker> onLongPress;
+
+  /// Non-null while multi-select mode is active; ids in the set render
+  /// with the selection overlay.
+  /// 多选模式激活时非 null；集合内的 id 会渲染选中覆盖层。
+  final Set<String>? selectedIds;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -300,6 +396,7 @@ class _StickerGrid extends ConsumerWidget {
           return StickerTile(
             sticker: sticker,
             showName: true,
+            selected: selectedIds?.contains(sticker.id) ?? false,
             onTap: () => onOpen(sticker),
             onLongPress: () => onLongPress(sticker),
           );

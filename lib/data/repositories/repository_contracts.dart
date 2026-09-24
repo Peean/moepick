@@ -29,6 +29,14 @@ abstract class SeriesRepository {
   /// 软删除系列及其下的表情包。
   Future<void> softDelete(String id);
 
+  /// Undo a soft-delete (回收站还原).
+  /// 撤销软删除（回收站还原）。
+  Future<void> restore(String id);
+
+  /// Physically remove the record (回收站彻底删除).
+  /// 物理移除记录（回收站彻底删除）。
+  Future<void> purge(String id);
+
   /// Direct access to raw records including deleted ones (used by backup/sync).
   /// 直接访问含已删除记录的原始数据（备份与同步使用）。
   List<Series> getAllIncludingDeleted();
@@ -59,6 +67,14 @@ abstract class StickerRepository {
   Future<void> saveAll(List<Sticker> stickers);
 
   Future<void> softDelete(String id);
+
+  /// Undo a soft-delete for the given ids (回收站批量还原).
+  /// 对给定 id 批量撤销软删除（回收站批量还原）。
+  Future<void> restoreAll(List<String> ids);
+
+  /// Physically remove the given records (回收站彻底删除).
+  /// 物理移除给定记录（回收站彻底删除）。
+  Future<void> purgeAll(List<String> ids);
 
   /// Physically remove every sticker in a series (used with series deletion).
   /// 物理移除某系列下的全部表情包（配合系列删除使用）。

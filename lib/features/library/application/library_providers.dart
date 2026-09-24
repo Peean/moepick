@@ -178,3 +178,41 @@ final Provider<Map<String, int>> libraryStatsProvider =
     'tags': ref.watch(tagListProvider).length,
   };
 });
+
+// --------------------------------------------------------------------- 回收站
+
+/// Soft-deleted series, oldest deletion first.
+/// 已软删除的系列，按删除时间倒序（最旧在前）。
+final Provider<List<Series>> trashSeriesProvider = Provider<List<Series>>(
+  (Ref ref) {
+    ref.watch(dataVersionProvider);
+    final List<Series> list = ref
+        .watch(seriesRepositoryProvider)
+        .getAllIncludingDeleted()
+        .where((Series s) => s.isDeleted)
+        .toList();
+    list.sort((Series a, Series b) => a.updatedAt.compareTo(b.updatedAt));
+    return list;
+  },
+);
+
+/// Soft-deleted stickers, oldest deletion first.
+/// 已软删除的表情包，按删除时间倒序（最旧在前）。
+final Provider<List<Sticker>> trashStickersProvider =
+    Provider<List<Sticker>>((Ref ref) {
+  ref.watch(dataVersionProvider);
+  final List<Sticker> list = ref
+      .watch(stickerRepositoryProvider)
+      .getAllIncludingDeleted()
+      .where((Sticker s) => s.isDeleted)
+      .toList();
+  list.sort((Sticker a, Sticker b) => a.updatedAt.compareTo(b.updatedAt));
+  return list;
+});
+
+/// How many items the trash holds, for the settings-page badge.
+/// 回收站条目数，供设置页角标使用。
+final Provider<int> trashCountProvider = Provider<int>((Ref ref) {
+  return ref.watch(trashSeriesProvider).length +
+      ref.watch(trashStickersProvider).length;
+});

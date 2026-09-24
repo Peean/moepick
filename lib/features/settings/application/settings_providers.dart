@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,6 +16,18 @@ import '../../../core/utils/path_utils.dart';
 import '../../../data/models/app_settings.dart';
 import '../../settings/application/background_service.dart';
 import 'storage_providers.dart';
+
+/// Top-level isolate entry: downscale a picked image for at-rest storage.
+/// 顶层 isolate 入口：将选中的图片缩放为入库尺寸。
+///
+/// Must be top-level with serializable args for `compute` on Dart 2.17.
+/// 为满足 Dart 2.17 的 `compute`，必须是顶层函数且参数可序列化。
+Uint8List downscaleForStorage(Uint8List bytes) =>
+    ImageUtils.downscaleSync(bytes, backgroundSourceMaxSize);
+
+/// Longest edge of a stored background source image.
+/// 背景原图入库的最长边。
+const int backgroundSourceMaxSize = 1920;
 
 /// Current application settings, backed by the `settings_v1` box.
 /// 当前应用设置，由 `settings_v1` box 支撑。
@@ -155,6 +168,16 @@ class BackgroundConfigNotifier extends Notifier<BackgroundConfig> {
 
   /// Replace the background image: store the source, then rebuild the cache.
   /// 替换背景图：先存原图，再重建缓存。
+  ///
+  /// The decode/resize runs in an isolate ([downscaleForStorage]): decoding a
+  /// 12-megapixel photo on the UI thread used to block frames for several
+  /// seconds, which is exactly the "app freezes when picking a background"
+  /// report. The file write stays on the main isolate because [FileStore]
+  /// captures non-sendable objects.
+  ///
+  /// 解码与缩放放入 isolate（[downscaleForStorage]）：过去在 UI 线程解码一张
+  /// 1200 万像素的照片会卡住数秒的帧——这正是「选背景图时软件卡住」的来源。
+  /// 文件写入留在主 isolate，因为 [FileStore] 持有不可发送的对象。
   Future<void> setImageFromPath(String absoluteSourcePath) async {
     final FileStore files = ref.read(fileStoreProvider);
     final Uint8List bytes = await File(absoluteSourcePath).readAsBytes();
@@ -162,10 +185,7 @@ class BackgroundConfigNotifier extends Notifier<BackgroundConfig> {
     // Downscale the stored source too: background art rarely benefits from
     // full resolution, and this keeps the backup small.
     // 存储的源图也一并降采样：背景图极少受益于原分辨率，且能使备份更小。
-    final Uint8List stored = ImageUtils.downscaleSync(
-      bytes,
-      1920,
-    );
+    final Uint8List stored = await compute(downscaleForStorage, bytes);
     final String hash = HashUtils.ofBytes(stored);
     final String relative = PathUtils.backgroundSourceRelativePath(
       hash,

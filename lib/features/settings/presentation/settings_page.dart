@@ -28,6 +28,7 @@ class SettingsPage extends ConsumerWidget {
     final AppSettings settings = ref.watch(appSettingsProvider);
     final BackgroundConfig background = ref.watch(backgroundConfigProvider);
     final Map<String, int> stats = ref.watch(libraryStatsProvider);
+    final int trashCount = ref.watch(trashCountProvider);
 
     return MoeScaffold(
       appBar: AppBar(
@@ -66,6 +67,14 @@ class SettingsPage extends ConsumerWidget {
           ),
 
           const SectionHeader('数据'),
+          _SettingsTile(
+            icon: Icons.delete_outline,
+            title: '回收站',
+            subtitle: trashCount > 0
+                ? '$trashCount 个条目 · 保留 7 天'
+                : '已删除的系列与表情包在这里还原',
+            onTap: () => context.go(RoutePaths.settingsTrash),
+          ),
           _SettingsTile(
             icon: Icons.backup_outlined,
             title: '备份与恢复',

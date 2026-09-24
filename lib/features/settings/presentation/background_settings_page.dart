@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -52,17 +53,63 @@ class _BackgroundSettingsPageState
   /// 立即给出滑杆反馈。
   ui.Image? _previewImage;
   String? _previewKey;
+
+  /// The *blurred* 256px preview, rebuilt every frame from [_previewImage].
+  /// 由 [_previewImage] 每帧重建的**模糊** 256px 预览。
+  ///
+  /// WHY BLUR THE PREVIEW AT ALL: previously the pane showed the sharp source
+  /// while the real cache was being regenerated off-thread, so the user only saw
+  /// the effect after the isolate finished — reading as "it lags, and then
+  /// eventually happens". At 256px a Gaussian blur costs ~1-3 ms, which fits in
+  /// a frame, so the pane can show the true effect immediately.
+  ///
+  /// 为什么要模糊预览：此前真实缓存正被异步重建时，面板显示的却是清晰的源图，
+  /// 于是用户要等 isolate 跑完才看到效果——体感就是「卡一下，然后才出现」。
+  /// 256px 图像上高斯模糊只要约 1-3 ms，能塞进一帧，因此面板可以立刻显示真实效果。
+  ui.Image? _blurredPreview;
+  String? _blurredPreviewKey;
+  bool _previewBlurPending = false;
+
+  /// Latest sigma the pane should be showing, so an in-flight blur knows
+  /// whether its result is already stale.
+  /// 面板应显示的最新 sigma，使在途的模糊知道自己的结果是否已过期。
+  double _liveSigma = 0;
+
+  /// Notifier captured during build so dispose can commit without `ref`.
+  /// build 期间捕获的 notifier，使 dispose 无需 `ref` 即可提交。
+  BackgroundConfigNotifier? _cachedNotifier;
+
   bool _busy = false;
+
+  /// What the picking stage is doing, in human terms.
+  /// 取图阶段正在做什么，用人类语言描述。
+  String _pickStage = '正在读取图片…';
 
   /// Local value shown on the blur slider while the debounce is pending; null
   /// means "follow the persisted config".
   /// 防抖待定时模糊滑杆显示的本地值；null 表示「跟随持久化配置」。
   double? _pendingSigma;
 
+  /// The slider value waiting to be committed, so nothing is lost when the
+  /// widget is disposed before the debounce elapses.
+  /// 等待提交的滑杆值，使防抖到期前组件被销毁也不会丢失改动。
+  double? _uncommittedSigma;
+
   @override
   void dispose() {
+    // Flush through the cached notifier: `ref` must not be touched inside
+    // dispose, but a pending slider value still deserves to be persisted.
+    // 通过缓存的 notifier 提交：dispose 内不得再碰 `ref`，
+    // 但待提交的滑杆值仍应落盘。
+    _blurDebouncer.flushNow();
+    final double? pending = _uncommittedSigma;
+    if (pending != null) {
+      _uncommittedSigma = null;
+      _cachedNotifier?.setBlurSigma(pending);
+    }
     _blurDebouncer.dispose();
     _previewImage?.dispose();
+    _blurredPreview?.dispose();
     super.dispose();
   }
 
@@ -71,12 +118,14 @@ class _BackgroundSettingsPageState
     final BackgroundConfig config = ref.watch(backgroundConfigProvider);
     final BackgroundConfigNotifier notifier =
         ref.read(backgroundConfigProvider.notifier);
-
-    // Keep the cheap preview bitmap in sync with the chosen source image.
-    // 使廉价预览位图与所选源图保持同步。
-    _syncPreview(config);
+    _cachedNotifier = notifier;
 
     final double sigma = _pendingSigma ?? config.blurSigma;
+
+    // Keep the cheap preview bitmap in sync with the chosen source image, and
+    // blur it to match the live sigma.
+    // 使廉价预览位图与所选源图保持同步，并按实时 sigma 模糊它。
+    _syncPreview(config, config.useBlur ? sigma : 0.0);
 
     return MoeScaffold(
       appBar: AppBar(
@@ -86,11 +135,27 @@ class _BackgroundSettingsPageState
           onPressed: () => context.go(RoutePaths.settings),
         ),
         actions: <Widget>[
+          // Destructive actions live behind an overflow menu, matching the
+          // series detail page. A bare square delete icon in the app bar was
+          // both visually inconsistent and one mis-tap away from data loss.
+          // 破坏性操作收进溢出菜单，与系列详情页一致。
+          // 光秃秃的方形删除图标既不统一，又离误触丢失数据只差一下。
           if (config.hasImage)
-            IconButton(
-              tooltip: '移除背景',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => _removeImage(notifier),
+            PopupMenuButton<String>(
+              tooltip: '更多操作',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (String value) {
+                if (value == 'remove') _removeImage(notifier);
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
+                  value: 'remove',
+                  child: DestructiveMenuItem(
+                    icon: Icons.delete_outline,
+                    label: '移除背景图片',
+                  ),
+                ),
+              ],
             ),
         ],
       ),
@@ -99,8 +164,9 @@ class _BackgroundSettingsPageState
         children: <Widget>[
           _PreviewPane(
             config: config,
-            previewImage: _previewImage,
+            previewImage: _blurredPreview ?? _previewImage,
             busy: _busy,
+            busyLabel: _pickStage,
           ),
           const SizedBox(height: 12),
           _ImageActions(
@@ -177,21 +243,15 @@ class _BackgroundSettingsPageState
             // 置灰而非隐藏，使用户能看到控件存在，并理解为何不可用。
             enabled: config.hasImage && config.useBlur,
             onChanged: (double value) {
-              // Cheap path: local state only, so the slider tracks the finger.
-              // 廉价路径：只改本地状态，使滑杆跟手。
+              // Cheap path: local state only. No persistence, no cache
+              // regeneration, no provider notification — so the slider tracks
+              // the finger no matter how expensive the blur is.
+              // 廉价路径：只改本地状态。不落盘、不重建缓存、不通知 provider，
+              // 因此无论模糊多贵，滑杆都跟手。
               setState(() => _pendingSigma = value);
-              _blurDebouncer.run(() {
-                if (!mounted) return;
-                notifier.setBlurSigma(value).then((_) {
-                  if (mounted) setState(() => _pendingSigma = null);
-                });
-              });
+              _scheduleBlurCommit(value);
             },
-            onChangeEnd: (double value) {
-              // Commit immediately on release instead of waiting out the delay.
-              // 松手时立即提交，而不必等满防抖时间。
-              _blurDebouncer.flushNow();
-            },
+            onChangeEnd: (_) => _flushBlurCommit(),
           ),
 
           const SizedBox(height: 20),
@@ -203,7 +263,7 @@ class _BackgroundSettingsPageState
 
   /// Decode a small preview of the source image for immediate slider feedback.
   /// 解码源图的小尺寸预览，用于滑杆的即时反馈。
-  void _syncPreview(BackgroundConfig config) {
+  void _syncPreview(BackgroundConfig config, double sigma) {
     final String? source = config.imageRelativePath;
     if (source == null || source.isEmpty) {
       if (_previewKey != null) {
@@ -211,41 +271,186 @@ class _BackgroundSettingsPageState
         _previewImage?.dispose();
         _previewImage = null;
       }
+      _dropBlurredPreview();
       return;
     }
-    if (_previewKey == source) return;
 
-    _previewKey = source;
-    // Decode after the frame: this runs during build, and starting file I/O
-    // mid-build would be both illegal and pointless.
-    // 在帧后解码：此处在 build 中调用，在 build 中启动文件 I/O 既非法也无意义。
+    if (_previewKey != source) {
+      _previewKey = source;
+      // Decode after the frame: this runs during build, and starting file I/O
+      // mid-build would be both illegal and pointless.
+      // 在帧后解码：此处在 build 中调用，在 build 中启动文件 I/O 既非法也无意义。
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final ui.Image? image = await loadUiImage(
+          await PathUtils.resolve(source),
+          cacheWidth: AppConstants.backgroundPreviewMaxSize,
+        );
+        if (!mounted) {
+          image?.dispose();
+          return;
+        }
+        setState(() {
+          _previewImage?.dispose();
+          _previewImage = image;
+        });
+        // The decoded source invalidates any blur derived from the old one.
+        // 解码出的新源图会使任何基于旧图派生的模糊失效。
+        _dropBlurredPreview();
+        _reblurPreview(sigma);
+      });
+      return;
+    }
+
+    _reblurPreview(sigma);
+  }
+
+  /// Blur the preview bitmap to match [sigma].
+  /// 按 [sigma] 模糊预览位图。
+  ///
+  /// Runs at most one blur per frame and drops intermediate requests, so
+  /// dragging fast never queues up work — the pane simply shows the last
+  /// computed frame, which is exactly what a live preview should do.
+  ///
+  /// 每帧至多执行一次模糊并丢弃中间请求，因此快速拖动不会堆积任务——
+  /// 面板只显示最近一帧的结果，这正是实时预览应有的行为。
+  void _reblurPreview(double sigma) {
+    final ui.Image? source = _previewImage;
+    if (source == null) return;
+
+    final BackgroundConfig config = ref.read(backgroundConfigProvider);
+    if (!config.useBlur) {
+      _dropBlurredPreview();
+      return;
+    }
+
+    final double effective = ImageUtils.sigmaFor(
+      sigma * AppConstants.backgroundPreviewScaleHint,
+    );
+    final String key = '${_previewKey}_${effective.toStringAsFixed(1)}';
+    if (_blurredPreviewKey == key && _blurredPreview != null) return;
+
+    if (_previewBlurPending) {
+      // A frame is already being computed for an older value; it will notice
+      // the newer sigma via [_liveSigma] and skip its own setState.
+      // 已有一帧在为更旧的值计算；它会通过 [_liveSigma] 发现更新的 sigma 并跳过 setState。
+      _liveSigma = sigma;
+      return;
+    }
+
+    _previewBlurPending = true;
+    _liveSigma = sigma;
+    final double requestSigma = sigma;
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final ui.Image? image = await loadUiImage(
-        await PathUtils.resolve(source),
-        cacheWidth: AppConstants.backgroundPreviewMaxSize,
-      );
+      _previewBlurPending = false;
+      final ui.Image? current = _previewImage;
+      if (!mounted || current == null) return;
+
+      final ui.Image? blurred =
+          await blurUiImage(current, effective);
       if (!mounted) {
-        image?.dispose();
+        blurred?.dispose();
         return;
       }
-      setState(() {
-        _previewImage?.dispose();
-        _previewImage = image;
+
+      if (blurred != null) {
+        setState(() {
+          _blurredPreview?.dispose();
+          _blurredPreview = blurred;
+          _blurredPreviewKey = key;
+        });
+      }
+
+      // A newer value arrived while this one was computing: recompute for it.
+      // 计算期间出现了更新的值：为它重算。
+      if (_liveSigma != requestSigma) _reblurPreview(_liveSigma);
+    });
+  }
+
+  void _dropBlurredPreview() {
+    _blurredPreviewKey = null;
+    _blurredPreview?.dispose();
+    _blurredPreview = null;
+  }
+
+  /// Record the value being dragged, committing it once the user pauses.
+  /// 记录正在拖动的取值，用户停手后提交。
+  ///
+  /// The commit itself is deferred to an idle slice: persisting the value
+  /// re-runs cache reconciliation, which walks the file system, and doing that
+  /// on the same frame as a slider update is what made dragging stutter.
+  ///
+  /// 提交本身推迟到空闲时隙：持久化会重新执行缓存核对（涉及文件系统遍历），
+  /// 把它和滑杆更新放在同一帧正是拖动卡顿的来源。
+  void _scheduleBlurCommit(double sigma) {
+    _uncommittedSigma = sigma;
+    _blurDebouncer.run(() {
+      if (!mounted) return;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _commitBlur();
       });
     });
   }
 
+  /// Commit immediately (slider released, or page closing).
+  /// 立即提交（滑杆松手，或页面正在关闭）。
+  void _flushBlurCommit() {
+    _blurDebouncer.flushNow();
+    _commitBlur();
+  }
+
+  void _commitBlur() {
+    final double? value = _uncommittedSigma;
+    if (value == null) return;
+    _uncommittedSigma = null;
+
+    final BackgroundConfigNotifier notifier =
+        ref.read(backgroundConfigProvider.notifier);
+    notifier.setBlurSigma(value).then((_) {
+      if (mounted) setState(() => _pendingSigma = null);
+    });
+  }
+
   Future<void> _pickImage(BackgroundConfigNotifier notifier) async {
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _pickStage = '正在打开相册…';
+    });
+
+    final String? path;
     try {
-      final String? path = await ImagePickerService.pickSingle();
-      if (path == null) return;
+      path = await ImagePickerService.pickSingle();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        showToast(context, '选择图片失败：$e', isError: true);
+      }
+      return;
+    }
+    if (path == null) {
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
+
+    // The copy/scale work now happens off the UI thread inside the notifier, so
+    // this only labels the wait rather than blocking on it.
+    // 拷贝与缩放现在于 notifier 内、UI 线程之外完成，因此这里只负责给等待贴标签，
+    // 而不是阻塞等待。
+    if (mounted) setState(() => _pickStage = '正在处理图片…');
+
+    try {
       await notifier.setImageFromPath(path);
       if (mounted) showToast(context, '背景已更新');
     } catch (e) {
-      if (mounted) showToast(context, '选择图片失败：$e', isError: true);
+      if (mounted) showToast(context, '设置背景失败：$e', isError: true);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _pickStage = '正在读取图片…';
+        });
+      }
     }
   }
 
@@ -272,11 +477,13 @@ class _PreviewPane extends StatelessWidget {
     required this.config,
     required this.previewImage,
     required this.busy,
+    required this.busyLabel,
   });
 
   final BackgroundConfig config;
   final ui.Image? previewImage;
   final bool busy;
+  final String busyLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -375,8 +582,18 @@ class _PreviewPane extends StatelessWidget {
             if (busy)
               ColoredBox(
                 color: Colors.black.withOpacity(0.35),
-                child: const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      const CircularProgressIndicator(color: Colors.white),
+                      const SizedBox(height: 14),
+                      Text(
+                        busyLabel,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
                 ),
               ),
           ],

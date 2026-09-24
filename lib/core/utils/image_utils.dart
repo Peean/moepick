@@ -195,7 +195,12 @@ Future<String> preBlurBackground(PreBlurRequest request) async {
 
   final File output = File(request.outputPath);
   await output.parent.create(recursive: true);
-  await output.writeAsBytes(img.encodePng(blurred), flush: true);
+  // JPEG, not PNG: the blur cache is an opaque backdrop, and encoding a 720px
+  // bitmap as PNG costs several hundred milliseconds while JPEG is ~5-10x
+  // faster with no visible difference on blurred content.
+  // 用 JPEG 而非 PNG：模糊缓存是不透明背景图，720px 位图的 PNG 编码要数百毫秒，
+  // 而 JPEG 快约 5-10 倍，且在模糊内容上看不出差别。
+  await output.writeAsBytes(img.encodeJpg(blurred, quality: 85), flush: true);
 
   return output.path;
 }
@@ -219,6 +224,55 @@ Future<ui.Image?> loadUiImage(File file, {int? cacheWidth}) async {
   } catch (e) {
     if (kDebugMode) {
       debugPrint('[ImageUtils] loadUiImage failed for ${file.path}: $e');
+    }
+    return null;
+  }
+}
+
+/// Blur an already-decoded `ui.Image` and return a new `ui.Image`.
+/// 对已解码的 `ui.Image` 做模糊并返回新的 `ui.Image`。
+///
+/// WHY THIS EXISTS / 为什么需要它
+///
+/// The settings page needs a *live* blurred preview while the slider moves.
+/// The persisted cache is regenerated off-thread by [preBlurBackground], but
+/// that takes seconds; at preview size (256px) a CPU blur takes ~1-3 ms, so
+/// doing it here — still off the build/layout path, on a small bitmap — gives
+/// an immediately visible effect without jank.
+///
+/// 设置页需要在滑杆移动时给出**实时**的模糊预览。持久化缓存由
+/// [preBlurBackground] 在后台线程重建，但那需要数秒；而预览尺寸（256px）下
+/// CPU 模糊只需约 1-3 ms，因此在这里做——仍不在 build/layout 路径上、
+/// 且只针对小位图——即可立即看到效果而不卡顿。
+///
+/// Returns null when encoding/decoding fails; callers keep showing the
+/// previous frame in that case.
+/// 编解码失败时返回 null；此时调用方继续显示上一帧。
+Future<ui.Image?> blurUiImage(ui.Image source, double sigma) async {
+  try {
+    if (sigma <= 0) return null;
+    final ByteData? data =
+        await source.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+    if (data == null) return null;
+
+    final img.Image cpu = img.Image.fromBytes(
+      width: source.width,
+      height: source.height,
+      bytes: data.buffer,
+      format: img.Format.uint8,
+      numChannels: 4,
+    );
+    final img.Image blurred = img.gaussianBlur(
+      cpu,
+      radius: sigma.round().clamp(1, 200),
+    );
+    final Uint8List png = Uint8List.fromList(img.encodePng(blurred));
+    final ui.Codec codec = await ui.instantiateImageCodec(png);
+    final ui.FrameInfo frame = await codec.getNextFrame();
+    return frame.image;
+  } catch (e) {
+    if (kDebugMode) {
+      debugPrint('[ImageUtils] blurUiImage failed: $e');
     }
     return null;
   }

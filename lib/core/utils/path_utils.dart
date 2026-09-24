@@ -144,13 +144,41 @@ class PathUtils {
 
   /// Relative path for a cached pre-blurred background.
   /// 预模糊背景缓存的相对路径。
+  ///
+  /// The cache is JPEG: blurred backdrops are opaque, and JPEG encodes ~5-10x
+  /// faster than PNG at this size.
+  /// 缓存为 JPEG：模糊背景不透明，且此尺寸下 JPEG 编码比 PNG 快约 5-10 倍。
   static String backgroundBlurRelativePath(String hash) =>
-      p.join(backgroundDir, 'bg_blur_$hash.png');
+      p.join(backgroundDir, 'bg_blur_$hash.jpg');
 
   /// Relative path for the stored (unprocessed) background source image.
   /// 存储的（未处理）背景原图的相对路径。
   static String backgroundSourceRelativePath(String hash, String extension) =>
       p.join(backgroundDir, 'bg_src_$hash${_normalizeExt(extension)}');
+
+  /// A directory the app is certain it can write into.
+  /// 应用确定可写入的目录。
+  ///
+  /// On Android that is app-private external storage (`/sdcard/Android/data/
+  /// <pkg>/files`), which needs no permission on any supported API level. On
+  /// desktop and iOS it is a sub-folder of the documents directory. Used as a
+  /// fallback when the user's chosen folder turns out to be read-only.
+  ///
+  /// Android 上是应用私有的外部存储（`/sdcard/Android/data/<pkg>/files`），
+  /// 在任一受支持的 API 级别都无需权限。桌面与 iOS 上则是文档目录的子文件夹。
+  /// 当用户所选文件夹不可写时作为回退目标。
+  static Future<Directory?> writableFallbackDir(String subdir) async {
+    try {
+      final Directory? base =
+          Platform.isAndroid ? await getExternalStorageDirectory() : null;
+      final Directory parent = base ?? await getApplicationDocumentsDirectory();
+      final Directory dir = Directory(p.join(parent.path, subdir));
+      await dir.create(recursive: true);
+      return dir;
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Ensure an extension starts with a dot and is lowercase.
   /// 确保扩展名以小写点号开头。
