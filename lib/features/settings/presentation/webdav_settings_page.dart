@@ -68,6 +68,25 @@ class _WebDavSettingsPageState extends ConsumerState<WebDavSettingsPage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go(RoutePaths.settings),
         ),
+        actions: <Widget>[
+          if (credentialsAsync.value?.isConfigured ?? false)
+            PopupMenuButton<String>(
+              tooltip: '更多操作',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (String value) {
+                if (value == 'clear') _clearConfig();
+              },
+              itemBuilder: (BuildContext ctx) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
+                  value: 'clear',
+                  child: DestructiveMenuItem(
+                    icon: Icons.delete_outline,
+                    label: '清除已保存配置',
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: Stack(
         children: <Widget>[
@@ -197,6 +216,39 @@ class _WebDavSettingsPageState extends ConsumerState<WebDavSettingsPage> {
             ? 'moepick'
             : _remoteRootController.text.trim(),
       );
+
+  /// Remove the stored credentials and blank the form.
+  /// 清除已保存的凭据并清空表单。
+  ///
+  /// WHY THIS EXISTS / 为什么需要它
+  ///
+  /// The form is seeded once from whatever was previously saved, so a stale
+  /// password keeps overriding what the user thinks they typed — the most
+  /// common cause of "I entered the right password but it still fails". A
+  /// one-tap reset removes that trap.
+  ///
+  /// 表单会用之前保存的旧值填充一次，于是陈旧的密码会持续覆盖用户以为自己
+  /// 输入的内容——这正是「明明输入了正确密码却仍然失败」的最常见原因。
+  /// 一键清除可移除这个陷阱。
+  Future<void> _clearConfig() async {
+    final bool ok = await confirm(
+      context,
+      title: '清除已保存配置',
+      message: '将删除已保存的服务器地址、用户名和密码，\n'
+          '之后需要重新填写并测试连接。',
+      confirmLabel: '清除',
+      destructive: true,
+    );
+    if (!ok) return;
+
+    await ref.read(secureStoreProvider).clear();
+    ref.invalidate(webDavCredentialsProvider);
+    _baseUrlController.clear();
+    _usernameController.clear();
+    _passwordController.clear();
+    _remoteRootController.clear();
+    if (mounted) showToast(context, '已清除配置');
+  }
 
   Future<void> _save() async {
     final WebDavCredentials credentials = _collect();
