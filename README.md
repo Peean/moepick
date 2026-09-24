@@ -41,8 +41,24 @@ tool/             Linux 构建与运行辅助脚本
 ## 环境要求
 
 - Flutter 3.0.0(Dart 2.17;更高版本亦可,但 `pubspec` 锁定于该工具链验证过的依赖)
+- Java:OpenJDK 17(Gradle 7.4 不支持 Java 18+;`JAVA_HOME` 指向 17)
 - Android:SDK 21+;Windows:Visual Studio 2022 桌面 C++ 工作负载;Linux:GTK 3 开发库、`ninja-build`、`cmake`
 - Linux 运行时另需 `xdg-user-dirs` 包(提供 `xdg-user-dir` 可执行文件);缺失时 `path_provider` 无法解析 `~/Documents`,应用会按设计显示「启动失败」而非崩溃
+
+## 应用图标
+
+图标为「贴纸笑脸」:樱粉渐变底(与应用默认种子色 `#E38FB1` 一致)+ 白描边呆毛圆脸。资源同时包含:
+
+- `mipmap-*/ic_launcher.png` / `ic_launcher_round.png`:传统图标(48dp 基准)
+- `mipmap-*/ic_launcher_foreground.png` + `drawable/ic_launcher_background.xml` + `mipmap-anydpi-v26/ic_launcher.xml`:Android 8+ 自适应图标(前景 108dp 基准,内容收在中央 66% 安全区)
+- `android/playstore-icon.png`:商店 512px 图
+
+修改配色或形状后重新生成:
+
+```bash
+pip3 install pillow
+python3 tool/gen_icons.py
+```
 
 ## 构建与运行
 
@@ -51,6 +67,7 @@ flutter pub get
 
 # Android
 flutter build apk            # 调试: flutter run
+flutter build appbundle      # 商店 AAB
 
 # Windows
 flutter config --enable-windows-desktop
@@ -61,6 +78,27 @@ flutter config --enable-linux-desktop
 ./tool/build_linux.sh        # 见下方说明
 ./tool/run_linux.sh 20       # 无显示器环境用 xvfb-run 拉起
 ```
+
+> Android 构建参数:`compileSdk 33`、`minSdk 18`、`Kotlin 1.9.10`。后两项高于 Flutter 3.0 模板默认值,是 `desktop_drop`(Kotlin 1.9.10)与 `flutter_secure_storage`(minSdk 18)插件的硬性要求,已在 `android/app/build.gradle`、`android/build.gradle` 中固定。
+
+### 中国大陆网络构建
+
+沙箱/国内网络无法直连 `dl.google.com`、`repo.maven.apache.org`、`services.gradle.org`、`storage.googleapis.com`,需两处镜像配置:
+
+1. **Gradle 仓库镜像**(`tool/mirror-init.gradle`):复制到 Gradle 用户目录的 init 目录,Gradle 会自动加载,把阿里云镜像前置到每个插件声明的 `google()`/`mavenCentral()` 之前:
+
+   ```bash
+   cp tool/mirror-init.gradle "$GRADLE_USER_HOME/init.d/"   # 或 ~/.gradle/init.d/
+   ```
+
+2. **`flutter.gradle` 镜像补丁**:`flutter_tools/gradle/flutter.gradle` 顶层 `buildscript` 是独立作用域,init 脚本管不到,需手动在其 `repositories` 前置:
+
+   ```gradle
+   maven { url 'https://maven.aliyun.com/repository/google' }
+   maven { url 'https://maven.aliyun.com/repository/public' }
+   ```
+
+3. **Gradle 发行版**:首次运行 `./gradlew` 会从 `services.gradle.org` 下载发行版,国内可用 `https://mirrors.cloud.tencent.com/gradle/gradle-7.4-all.zip` 替换 `gradle-wrapper.properties` 的 `distributionUrl`,或先手动下载放入 wrapper 缓存目录。
 
 ### Linux 构建说明(`tool/build_linux.sh`)
 
@@ -100,11 +138,17 @@ flutter test      # 101 个测试
 
 ### Android
 
-1. `android/app/build.gradle`:`applicationId` 保持 `moepick` 相关 ID,按渠道调整 `versionCode` / `versionName`
-2. `flutter build appbundle --release` 生成商店用 AAB;`flutter build apk --release` 生成直装 APK
-3. 签名:配置 `key.properties` 与 upload key,确认 `signingConfig` 生效
+1. `android/app/build.gradle`:`applicationId` 保持 `com.moepick.moepick`,按渠道调整 `versionCode` / `versionName`
+2. `flutter build appbundle --release` 生成商店用 AAB;`flutter build apk --release` 生成直装 APK(输出于 `build/app/outputs/flutter-apk/`)
+3. 签名:模板默认用 debug key,发布前配置正式签名——生成 keystore 后在 `android/key.properties` 写入路径与口令,并在 `app/build.gradle` 的 `buildTypes.release` 引用:
+
+   ```bash
+   keytool -genkey -v -keystore ~/moepick-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias moepick
+   ```
+
 4. 权限最小化:确认 `AndroidManifest.xml` 只声明实际用到的权限(网络仅 WebDAV 同步需要)
 5. 目标 API 级别满足商店当年要求;真机回归:备份导出分享、从文件恢复、WebDAV 同步
+6. 桌面显示名与图标:`android:label="拾萌"`,图标资源见上方「应用图标」一节
 
 ### Windows
 

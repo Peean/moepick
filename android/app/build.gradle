@@ -26,7 +26,10 @@ apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
-    compileSdkVersion flutter.compileSdkVersion
+    // Kotlin 1.9.10 pulls androidx artifacts that require compileSdk 33.
+    // Flutter 3.0 defaults to 31, which is too old for those versions.
+    // Kotlin 1.9.10 拉取的 androidx 依赖要求 compileSdk 33;Flutter 3.0 默认 31 太旧。
+    compileSdkVersion 33
     ndkVersion flutter.ndkVersion
 
     compileOptions {
@@ -45,9 +48,9 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId "com.moepick.moepick"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-build-configuration.
-        minSdkVersion flutter.minSdkVersion
+        // flutter_secure_storage requires minSdk 18 (Flutter 3.0 defaults to 16).
+        // flutter_secure_storage 要求 minSdk 18(Flutter 3.0 默认 16)。
+        minSdkVersion 18
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

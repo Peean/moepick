@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 打包产物(APK 二进制不提交)
+/dist/

@@ -1,0 +1,58 @@
+// Global repository mirror for restricted networks (mainland China).
+// 面向受限网络(中国大陆)的全局仓库镜像。
+//
+// WHY / 为什么
+// Every Flutter plugin hardcodes `repositories { google(); mavenCentral() }`
+// in its own `android/build.gradle` (both in `buildscript {}` and in
+// `rootProject.allprojects {}`). Those hosts are unreachable from mainland
+// China, and Gradle resolves repositories in declaration order — so as long as
+// they are listed first, every single artifact costs a TLS handshake timeout
+// before Gradle even tries a mirror.
+//
+// 每个 Flutter 插件都在自己的 `android/build.gradle` 里硬编码
+// `repositories { google(); mavenCentral() }`(同时出现在 `buildscript {}` 与
+// `rootProject.allprojects {}`)。这些主机在中国大陆不可达,而 Gradle 按声明顺序
+// 解析仓库——只要它们排在前面,每个 artifact 都会先白等一次 TLS 握手超时,才轮到镜像。
+//
+// HOW / 怎么做
+// `allprojects {}` runs before each project's build.gradle, so the mirrors added
+// below land AHEAD of whatever the plugin appends. Resolution stops at the first
+// hit, so the dead hosts are never contacted. Nothing needs to be removed.
+//
+// `allprojects {}` 在每个项目 build.gradle 之前执行,因此下方添加的镜像会排在插件追加
+// 的仓库之前。解析命中即停,死主机永远不会被访问。无需移除任何东西。
+//
+// NOTE — flutter.gradle / 关于 flutter.gradle
+// This file alone is NOT sufficient. `flutter_tools/gradle/flutter.gradle`
+// opens with its own top-level `buildscript { repositories { google();
+// mavenCentral() } }`, which is evaluated in an *independent* scope the moment
+// `app/build.gradle` does `apply from:` it — `allprojects {}` cannot reach it.
+// That file needs its own mirror prepended (see the patched flutter.gradle).
+//
+// 仅靠本文件**不够**。`flutter_tools/gradle/flutter.gradle` 开头有自己的顶层
+// `buildscript { repositories { google(); mavenCentral() } }`,它在 `app/build.gradle`
+// 执行 `apply from:` 时于**独立**作用域中求值,`allprojects {}` 够不到它。
+// 该文件需要单独前置镜像(见已打补丁的 flutter.gradle)。
+//
+// USAGE / 用法
+// Copy (or symlink) this file into `$GRADLE_USER_HOME/init.d/`, then build
+// normally. It is deliberately kept OUTSIDE the repository so every developer's
+// local checkout is not forced onto mirrors (mirrors can lag upstream).
+//
+// 把本文件复制(或软链)到 `$GRADLE_USER_HOME/init.d/`,然后照常构建。
+// 本文件刻意不放进仓库,以免强制每位开发者的本地检出都走镜像(镜像可能滞后于上游)。
+
+allprojects {
+    buildscript {
+        repositories {
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/public' }
+            maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        }
+    }
+    repositories {
+        maven { url 'https://storage.flutter-io.cn/download.flutter.io' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+    }
+}
