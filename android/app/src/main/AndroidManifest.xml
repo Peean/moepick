@@ -1,5 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.moepick.moepick">
+   <!--
+     Required for WebDAV sync and sticker sharing. Flutter injects this into
+     debug/profile builds automatically (for hot reload / profiling), but the
+     release manifest must declare it explicitly — without it every network
+     request fails with a SocketException, which surfaces as "cannot connect".
+     网络权限：WebDAV 同步与表情包分享需要。Flutter 会在 debug/profile 构建里自动
+     注入（用于热重载/性能分析），但 release 必须显式声明——否则所有网络请求都会
+     以 SocketException 失败，表现为「无法连接服务器」。
+   -->
+   <uses-permission android:name="android.permission.INTERNET"/>
    <application
         android:label="拾萌"
         android:name="${applicationName}"
