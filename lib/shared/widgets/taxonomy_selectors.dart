@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/models/category.dart';
-import '../../../data/models/tag.dart';
+import '../../core/state/data_version.dart';
+import '../../data/models/category.dart';
+import '../../data/models/tag.dart';
 import '../../features/library/application/library_providers.dart';
 import '../../features/settings/application/storage_providers.dart';
 import 'common.dart';
@@ -69,6 +70,13 @@ class CategorySelector extends ConsumerWidget {
     final String id = await ref
         .read(taxonomyRepositoryProvider)
         .saveCategoryWithName(name.trim());
+
+    // The category/tag list providers derive from the data-version signal, so
+    // writing a new category here must bump it — otherwise the new chip does not
+    // appear until some other write (e.g. saving the series) refreshes the list.
+    // 分类/标签列表 provider 派生自数据版本信号，因此这里写入新分类后必须自增该信号——
+    // 否则新芯片要等到其他写入（如保存系列）刷新列表时才会出现。
+    ref.read(dataVersionProvider.notifier).bump();
 
     // Auto-select the freshly created category: creating one mid-edit almost
     // always means the user wants it applied.
@@ -177,6 +185,11 @@ class _TagSelectorState extends ConsumerState<TagSelector> {
     // 而不是创建近似重复项。
     final String id =
         await ref.read(taxonomyRepositoryProvider).ensureTag(name);
+
+    // Same as the category path: bump the data version so the tag chip shows up
+    // immediately instead of after the next unrelated write.
+    // 与分类路径同理：自增数据版本，使标签芯片立即出现，而不是等到下一次无关写入。
+    ref.read(dataVersionProvider.notifier).bump();
 
     _controller.clear();
     _focusNode.requestFocus();

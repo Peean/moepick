@@ -90,7 +90,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go(RoutePaths.library),
+          onPressed: () => context.pop(),
         ),
       ),
       body: Column(
@@ -441,7 +441,7 @@ class _ResultTile extends StatelessWidget {
             sticker: sticker,
             cacheWidth: 240,
             borderRadius: 10,
-            onTap: () => context.go(RoutePaths.stickerOf(sticker.id)),
+            onTap: () => context.push(RoutePaths.stickerOf(sticker.id)),
           ),
         ),
         const SizedBox(height: 4),

@@ -41,15 +41,32 @@ class BackgroundLayer extends StatelessWidget {
           // RawImage paints an already-decoded ui.Image directly. Using it
           // instead of Image.asset/file avoids re-running decode or filter work
           // during the frame.
-          // RawImage 直接绘制已解码的 ui.Image。相比 Image.file，
-          // 它避免在帧内重复执行解码或滤镜运算。
-          RawImage(
-            image: image,
-            fit: BoxFit.cover,
-            opacity: AlwaysStoppedAnimation<double>(
-              config.opacity.clamp(0.0, 1.0),
+          //
+          // WHY AN `Opacity` WIDGET AND NOT RawImage's OWN `opacity` PARAM:
+          // RenderImage.opacity's setter swaps the Animation object but never
+          // calls markNeedsPaint — it relies on the Animation's listener firing,
+          // which never happens for the AlwaysStoppedAnimation this widget
+          // creates on every build. The result was that dragging the opacity
+          // slider updated the stored config but never repainted until the next
+          // unrelated repaint (in practice: an app restart). RenderOpacity's
+          // setter does mark needs-paint, so wrapping in `Opacity` makes the
+          // slider live.
+          //
+          // RawImage 直接绘制已解码的 ui.Image，避免帧内重复解码。
+          // 为何用 `Opacity` widget 而非 RawImage 自带的 `opacity` 参数：
+          // RenderImage.opacity 的 setter 只替换 Animation 对象，从不调用
+          // markNeedsPaint——它依赖 Animation 的监听器触发，而本组件每次 build
+          // 新建的 AlwaysStoppedAnimation 值永远不变，监听器永不触发。结果是拖动
+          // 不透明度滑杆只更新了存储的配置，却直到下一次无关重绘（实践中即重启
+          // 应用）才重绘。RenderOpacity 的 setter 会标记需要重绘，因此用 `Opacity`
+          // 包裹使滑杆实时生效。
+          Opacity(
+            opacity: config.opacity.clamp(0.0, 1.0),
+            child: RawImage(
+              image: image,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.low,
             ),
-            filterQuality: FilterQuality.low,
           ),
           if (config.scrimOpacity > 0)
             ColoredBox(

@@ -23,6 +23,7 @@ class StickerTile extends StatelessWidget {
     this.selected = false,
     this.cacheWidth = 300,
     this.borderRadius = 12,
+    this.showName = false,
   }) : super(key: key);
 
   final Sticker sticker;
@@ -32,10 +33,26 @@ class StickerTile extends StatelessWidget {
   final int cacheWidth;
   final double borderRadius;
 
+  /// When true, a small centred caption is drawn under the thumbnail showing the
+  /// sticker's name (or 「未命名」 when it has none). Used by the series grid,
+  /// where several visually similar images are otherwise hard to tell apart.
+  /// 为 true 时，缩略图下方绘制居中小字，显示表情包名称（无名时显示「未命名」）。
+  /// 用于系列网格——那里多张外观相近的图片若不标注名称很难区分。
+  final bool showName;
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final String stored = sticker.thumbPath ?? sticker.relativePath;
+
+    final Widget imageStack = Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        _StickerImage(storedPath: stored, cacheWidth: cacheWidth),
+        if (selected)
+          ColoredBox(color: theme.colorScheme.primary.withOpacity(0.18)),
+      ],
+    );
 
     return Material(
       color: theme.colorScheme.onSurface.withOpacity(0.04),
@@ -52,14 +69,30 @@ class StickerTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            _StickerImage(storedPath: stored, cacheWidth: cacheWidth),
-            if (selected)
-              ColoredBox(color: theme.colorScheme.primary.withOpacity(0.18)),
-          ],
-        ),
+        child: showName
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Expanded(child: imageStack),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 3, 4, 4),
+                    child: Text(
+                      sticker.name.isEmpty ? '未命名' : sticker.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 11,
+                        height: 1.2,
+                        color: sticker.name.isEmpty
+                            ? theme.colorScheme.onSurface.withOpacity(0.40)
+                            : theme.colorScheme.onSurface.withOpacity(0.75),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : imageStack,
       ),
     );
   }

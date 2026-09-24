@@ -159,7 +159,7 @@ Future<bool> confirm(
       final ThemeData theme = Theme.of(context);
       return AlertDialog(
         title: Text(title),
-        content: Text(message, style: const TextStyle(height: 1.5)),
+        content: markdownText(message, style: const TextStyle(height: 1.5)),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -193,6 +193,35 @@ void showToast(BuildContext context, String message, {bool isError = false}) {
         duration: Duration(seconds: isError ? 4 : 2),
       ),
     );
+}
+
+/// Render [source] with minimal inline Markdown: `**bold**` spans become bold.
+/// 以最小内联 Markdown 渲染 [source]：`**加粗**` 片段呈现为粗体。
+///
+/// Deliberately NOT a full Markdown renderer — just the one construct the
+/// confirmation dialogs need, so `confirm(message: '...**替换**...')` reads
+/// correctly instead of leaking the asterisks into the UI.
+///
+/// 刻意不是完整的 Markdown 渲染器——只实现确认对话框需要的这一种语法，
+/// 使 `confirm(message: '...**替换**...')` 能正确显示，而不是把星号泄漏到界面上。
+Widget markdownText(String source, {TextStyle? style}) {
+  final List<TextSpan> spans = <TextSpan>[];
+  final RegExp bold = RegExp(r'\*\*(.+?)\*\*');
+  int cursor = 0;
+  for (final RegExpMatch match in bold.allMatches(source)) {
+    if (match.start > cursor) {
+      spans.add(TextSpan(text: source.substring(cursor, match.start)));
+    }
+    spans.add(TextSpan(
+      text: match.group(1),
+      style: const TextStyle(fontWeight: FontWeight.w700),
+    ));
+    cursor = match.end;
+  }
+  if (cursor < source.length) {
+    spans.add(TextSpan(text: source.substring(cursor)));
+  }
+  return Text.rich(TextSpan(style: style, children: spans));
 }
 
 /// A saturated accent derived from the current theme, for tag/category chips.
@@ -315,6 +344,37 @@ class _TextPromptDialogState extends State<_TextPromptDialog> {
         TextButton(
           onPressed: _submit,
           child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
+  }
+}
+
+/// A menu item styled as a destructive action, matching the red buttons used
+/// elsewhere for delete operations. Keeps the overflow-menu "delete" entries
+/// consistent with the inline delete buttons.
+/// 以「危险操作」样式呈现的菜单项，与应用其他地方删除按钮所用的红色一致。
+/// 使溢出菜单中的「删除」项与内联删除按钮风格统一。
+class DestructiveMenuItem extends StatelessWidget {
+  const DestructiveMenuItem({
+    Key? key,
+    required this.icon,
+    required this.label,
+  }) : super(key: key);
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color error = Theme.of(context).colorScheme.error;
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 18, color: error),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: TextStyle(color: error),
         ),
       ],
     );

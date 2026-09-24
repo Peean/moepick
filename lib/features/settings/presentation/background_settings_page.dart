@@ -294,13 +294,19 @@ class _PreviewPane extends StatelessWidget {
             ColoredBox(color: theme.colorScheme.surface),
 
             if (previewImage != null)
-              RawImage(
-                image: previewImage,
-                fit: BoxFit.cover,
-                opacity: AlwaysStoppedAnimation<double>(
-                  config.opacity.clamp(0.0, 1.0),
+              // `Opacity` wrapper instead of RawImage's own `opacity` param —
+              // same reasoning as in BackgroundLayer: RenderImage.opacity never
+              // marks needs-paint, so slider changes would not repaint.
+              // 用 `Opacity` 包裹而非 RawImage 的 `opacity` 参数——理由同
+              // BackgroundLayer：RenderImage.opacity 从不标记需要重绘，
+              // 否则滑杆变化不会重绘。
+              Opacity(
+                opacity: config.opacity.clamp(0.0, 1.0),
+                child: RawImage(
+                  image: previewImage,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.low,
                 ),
-                filterQuality: FilterQuality.low,
               ),
 
             if (config.scrimOpacity > 0)

@@ -49,7 +49,7 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
           title: const Text('系列'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go(RoutePaths.library),
+            onPressed: () => context.pop(),
           ),
         ),
         body: EmptyState(
@@ -57,7 +57,7 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
           title: '这个系列已不存在',
           message: '它可能已被删除。',
           action: ElevatedButton(
-            onPressed: () => context.go(RoutePaths.library),
+            onPressed: () => context.pop(),
             child: const Text('返回首页'),
           ),
         ),
@@ -75,14 +75,14 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
         title: Text(series.name),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go(RoutePaths.library),
+          onPressed: () => context.pop(),
         ),
         actions: <Widget>[
           IconButton(
             tooltip: '编辑系列信息',
             icon: const Icon(Icons.edit_outlined),
             onPressed: () =>
-                context.go(RoutePaths.seriesEditOf(series.id)),
+                context.push(RoutePaths.seriesEditOf(series.id)),
           ),
           PopupMenuButton<String>(
             onSelected: (String value) {
@@ -91,7 +91,10 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
             itemBuilder: (BuildContext ctx) => <PopupMenuEntry<String>>[
               const PopupMenuItem<String>(
                 value: 'delete',
-                child: Text('删除系列'),
+                child: DestructiveMenuItem(
+                  icon: Icons.delete_outline,
+                  label: '删除系列',
+                ),
               ),
             ],
           ),
@@ -167,7 +170,7 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
               sliver: _StickerGrid(
                 stickers: stickers,
                 onOpen: (Sticker s) =>
-                    context.go(RoutePaths.stickerOf(s.id)),
+                    context.push(RoutePaths.stickerOf(s.id)),
                 onLongPress: _confirmDeleteSticker,
               ),
             ),
@@ -244,7 +247,7 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
     await ref.read(libraryActionsProvider).deleteSeries(series.id);
     if (mounted) {
       showToast(context, '已删除「${series.name}」');
-      context.go(RoutePaths.library);
+      context.pop();
     }
   }
 }
@@ -286,13 +289,17 @@ class _StickerGrid extends ConsumerWidget {
         maxCrossAxisExtent: maxExtent,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 1,
+        // Height = width + a caption line, so the name under each tile has room
+        // without being clipped.
+        // 高度 = 宽度 + 一行名称，使每个瓦片下方的名称有空间而不被裁剪。
+        childAspectRatio: 0.82,
       ),
       delegate: SliverChildBuilderDelegate(
         (BuildContext context, int index) {
           final Sticker sticker = stickers[index];
           return StickerTile(
             sticker: sticker,
+            showName: true,
             onTap: () => onOpen(sticker),
             onLongPress: () => onLongPress(sticker),
           );

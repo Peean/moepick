@@ -75,48 +75,53 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
               ),
             ],
           ),
-        ],
-      ),
 
-      // Series routes. `create` is declared before `:id` so that a literal
-      // segment is never captured as an id.
-      // 系列路由。`create` 声明在 `:id` 之前，避免字面量段被当作 id 捕获。
-      GoRoute(
-        path: '${RoutePaths.seriesDetail}/create',
-        builder: (BuildContext context, GoRouterState state) =>
-            const SeriesEditPage(),
-      ),
-      GoRoute(
-        path: '${RoutePaths.seriesDetail}/:id',
-        builder: (BuildContext context, GoRouterState state) => SeriesDetailPage(
-          seriesId: state.params['id'] ?? '',
-        ),
-        routes: <GoRoute>[
+          // Series routes live UNDER the library route so the home screen stays
+          // on the navigation stack. `create` is declared before `:id` so that a
+          // literal segment is never captured as an id.
+          //
+          // 系列路由挂在 library 之下，使主页始终保留在导航栈中。
+          // `create` 声明在 `:id` 之前，避免字面量段被当作 id 捕获。
           GoRoute(
-            path: 'edit',
+            path: 'series/create',
             builder: (BuildContext context, GoRouterState state) =>
-                SeriesEditPage(
+                const SeriesEditPage(),
+          ),
+          GoRoute(
+            path: 'series/:id',
+            builder: (BuildContext context, GoRouterState state) =>
+                SeriesDetailPage(
               seriesId: state.params['id'] ?? '',
             ),
+            routes: <GoRoute>[
+              GoRoute(
+                path: 'edit',
+                builder: (BuildContext context, GoRouterState state) =>
+                    SeriesEditPage(
+                  seriesId: state.params['id'] ?? '',
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
 
-      // Sticker routes.
-      // 表情包路由。
-      GoRoute(
-        path: '${RoutePaths.stickerDetail}/:id',
-        builder: (BuildContext context, GoRouterState state) =>
-            StickerDetailPage(
-          stickerId: state.params['id'] ?? '',
-        ),
-        routes: <GoRoute>[
+          // Sticker routes, likewise nested so the back gesture returns to the
+          // series instead of exiting the app.
+          // 表情包路由，同样嵌套，使返回手势回到系列而非退出应用。
           GoRoute(
-            path: 'edit',
+            path: 'sticker/:id',
             builder: (BuildContext context, GoRouterState state) =>
-                StickerEditPage(
+                StickerDetailPage(
               stickerId: state.params['id'] ?? '',
             ),
+            routes: <GoRoute>[
+              GoRoute(
+                path: 'edit',
+                builder: (BuildContext context, GoRouterState state) =>
+                    StickerEditPage(
+                  stickerId: state.params['id'] ?? '',
+                ),
+              ),
+            ],
           ),
         ],
       ),

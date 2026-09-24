@@ -71,7 +71,7 @@ class _StickerEditPageState extends ConsumerState<StickerEditPage> {
           title: '找不到这张表情包',
           message: '它可能已被删除。',
           action: ElevatedButton(
-            onPressed: () => context.go(RoutePaths.library),
+            onPressed: () => context.pop(),
             child: const Text('返回首页'),
           ),
         ),
@@ -85,7 +85,7 @@ class _StickerEditPageState extends ConsumerState<StickerEditPage> {
         title: const Text('编辑表情包'),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => context.go(RoutePaths.stickerOf(sticker.id)),
+          onPressed: () => context.pop(),
         ),
         actions: <Widget>[
           TextButton(
@@ -194,7 +194,7 @@ class _StickerEditPageState extends ConsumerState<StickerEditPage> {
 
   Future<void> _save(Sticker sticker) async {
     if (!_isDirty) {
-      if (mounted) context.go(RoutePaths.stickerOf(sticker.id));
+      if (mounted) context.pop();
       return;
     }
 
@@ -209,7 +209,7 @@ class _StickerEditPageState extends ConsumerState<StickerEditPage> {
           );
       if (!mounted) return;
       showToast(context, '已保存');
-      context.go(RoutePaths.stickerOf(sticker.id));
+      context.pop();
     } catch (e) {
       if (mounted) showToast(context, '保存失败：$e', isError: true);
     } finally {

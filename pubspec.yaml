@@ -47,6 +47,10 @@ dependencies:
   dio: ^4.0.6
   connectivity_plus: ^2.3.9
 
+  # --- 文件保存/选择 / File save & pick ---
+  # Android 上用于系统「保存到…」与「选择文件」对话框（file_selector 仅桌面可用）
+  file_picker: ^5.2.10
+
   # --- 工具 / Utilities ---
   uuid: ^3.0.7
   intl: any

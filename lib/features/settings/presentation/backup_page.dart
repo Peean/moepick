@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../../core/platform/file_save_service.dart';
 import '../../../core/state/data_version.dart';
@@ -88,8 +87,8 @@ class _BackupPageState extends ConsumerState<BackupPage> {
               const _Note(
                 text: '备份是普通的 zip 压缩包，内含 manifest.json 与图片文件，'
                     '不依赖任何云端服务。\n'
-                    'Android 上导出后会弹出系统分享面板，'
-                    '你可以存到文件管理器、发给自己或上传网盘。',
+                    '导出时会弹出系统文件管理器，'
+                    '你可以选择保存到任意文件夹。',
               ),
             ],
           ),
@@ -149,22 +148,14 @@ class _BackupPageState extends ConsumerState<BackupPage> {
 
       if (!mounted) return;
 
-      // Android cannot show a save dialog, so hand the file to the share sheet
-      // to complete the "get it out of the app" flow.
-      // Android 无法展示保存对话框，因此把文件交给分享面板，
-      // 以完成「把文件送出应用」的流程。
-      if (Platform.isAndroid) {
-        await Share.shareXFiles(<XFile>[XFile(result.path)], text: '拾萌备份');
-        if (mounted) {
-          showToast(context, '已导出 ${_formatBytes(result.bytes)}');
-        }
-      } else {
-        showToast(
-          context,
-          '已导出到 ${result.path.split(Platform.pathSeparator).last}'
-          '（${_formatBytes(result.bytes)}）',
-        );
-      }
+      // The user already picked a concrete destination via the platform file
+      // manager, so just confirm where the file landed.
+      // 用户已通过系统文件管理器选定具体位置，因此只需确认文件落点。
+      showToast(
+        context,
+        '已导出到 ${result.path.split(Platform.pathSeparator).last}'
+        '（${_formatBytes(result.bytes)}）',
+      );
     } catch (e) {
       if (mounted) showToast(context, '导出失败：$e', isError: true);
     } finally {

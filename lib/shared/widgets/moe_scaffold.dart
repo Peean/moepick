@@ -44,16 +44,23 @@ class MoeScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final BackgroundConfig config = ref.watch(backgroundConfigProvider);
     final bool hasImage = config.hasImage;
-    final bool fullscreen = config.mode == BackgroundMode.fullscreen;
 
-    // Only go transparent when there is actually an image to reveal; otherwise
-    // a transparent scaffold would show a bare window background.
-    // 仅当确实有图片可透出时才转透明；否则透明 scaffold 会露出空洞的窗口底色。
+    // Card mode previously kept the scaffold opaque, which painted solidly over
+    // the background layer — the configured image could never show through and
+    // every background slider appeared dead until an app restart. The intended
+    // design is "content areas opaque, background showing through at the edges",
+    // so with an image present the scaffold is transparent in BOTH modes and the
+    // difference between them lives entirely in MoeCard's surface opacity.
+    //
+    // 卡片模式此前保持 scaffold 不透明，把背景层完全盖死——配置的图片永远透不出来，
+    // 所有背景滑杆看起来都像失灵，直到重启应用。设计意图是「内容区不透明、背景从
+    // 边缘透出」，因此只要有图片，两种模式下 scaffold 都透明，二者的差异完全体现在
+    // MoeCard 的表面不透明度上。
     final Color resolvedBackground = backgroundColor ??
-        (fullscreen && hasImage ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor);
+        (hasImage ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor);
 
     PreferredSizeWidget? resolvedAppBar = appBar;
-    if (resolvedAppBar != null && fullscreen && hasImage) {
+    if (resolvedAppBar != null && hasImage) {
       // Make the app bar translucent so the artwork is not cut off at the top.
       // The wrapper preserves the original height contract.
       // 使 app bar 半透明，避免图案在顶部被硬切断。

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../data/models/series.dart';
-import '../../../routes/route_paths.dart';
 import '../../../shared/widgets/common.dart';
 import '../../../shared/widgets/moe_scaffold.dart';
 import '../../../shared/widgets/taxonomy_selectors.dart';
@@ -186,7 +185,7 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
         title: '找不到这个系列',
         message: '它可能已被删除。',
         action: ElevatedButton(
-          onPressed: () => context.go(RoutePaths.library),
+          onPressed: () => context.pop(),
           child: const Text('返回首页'),
         ),
       ),
@@ -194,11 +193,7 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
   }
 
   void _cancel(BuildContext context) {
-    if (widget.isCreating) {
-      context.go(RoutePaths.library);
-    } else {
-      context.go(RoutePaths.seriesOf(widget.seriesId!));
-    }
+    context.pop();
   }
 
   Future<void> _save(BuildContext context) async {
@@ -228,7 +223,7 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
           );
         }
         if (!mounted) return;
-        context.go(RoutePaths.seriesOf(id));
+        context.pop();
       } else {
         final Series? series =
             ref.read(seriesByIdLookupProvider(widget.seriesId!));
@@ -246,7 +241,7 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
         );
         if (!mounted) return;
         showToast(context, '已保存');
-        context.go(RoutePaths.seriesOf(series.id));
+        context.pop();
       }
     } catch (e) {
       if (mounted) showToast(context, '保存失败：$e', isError: true);
@@ -269,7 +264,7 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
     await ref.read(libraryActionsProvider).deleteSeries(series.id);
     if (mounted) {
       showToast(context, '已删除「${series.name}」');
-      context.go(RoutePaths.library);
+      context.pop();
     }
   }
 }

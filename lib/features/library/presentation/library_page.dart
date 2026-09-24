@@ -108,7 +108,7 @@ class LibraryPage extends ConsumerWidget {
                         return SeriesCard(
                           series: series,
                           onTap: () => context
-                              .go(RoutePaths.seriesOf(series.id)),
+                              .push(RoutePaths.seriesOf(series.id)),
                         );
                       },
                       childCount: seriesList.length,
@@ -141,7 +141,7 @@ class LibraryPage extends ConsumerWidget {
     // context 可证为存活。分析器无法看穿该辅助函数（它只对字面量名
     // `mounted` 特判），故此处做针对性忽略。
     if (!contextIsAlive(context)) return;
-    context.go(RoutePaths.seriesOf(id));
+    context.push(RoutePaths.seriesOf(id));
   }
 }
 

@@ -65,7 +65,7 @@ class StickerDetailPage extends ConsumerWidget {
           title: const Text('表情包'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go(RoutePaths.library),
+            onPressed: () => context.pop(),
           ),
         ),
         body: EmptyState(
@@ -73,7 +73,7 @@ class StickerDetailPage extends ConsumerWidget {
           title: '这张表情包已不存在',
           message: '它可能已被删除。',
           action: ElevatedButton(
-            onPressed: () => context.go(RoutePaths.library),
+            onPressed: () => context.pop(),
             child: const Text('返回首页'),
           ),
         ),
@@ -90,13 +90,13 @@ class StickerDetailPage extends ConsumerWidget {
         title: Text(_titleFor(sticker, series)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go(RoutePaths.seriesOf(sticker.seriesId)),
+          onPressed: () => context.pop(),
         ),
         actions: <Widget>[
           IconButton(
             tooltip: '编辑',
             icon: const Icon(Icons.edit_outlined),
-            onPressed: () => context.go(RoutePaths.stickerEditOf(sticker.id)),
+            onPressed: () => context.push(RoutePaths.stickerEditOf(sticker.id)),
           ),
           PopupMenuButton<String>(
             onSelected: (String value) {
@@ -105,7 +105,10 @@ class StickerDetailPage extends ConsumerWidget {
             itemBuilder: (BuildContext ctx) => <PopupMenuEntry<String>>[
               const PopupMenuItem<String>(
                 value: 'delete',
-                child: Text('删除表情包'),
+                child: DestructiveMenuItem(
+                  icon: Icons.delete_outline,
+                  label: '删除表情包',
+                ),
               ),
             ],
           ),
@@ -135,7 +138,7 @@ class StickerDetailPage extends ConsumerWidget {
                 if (series != null)
                   TextButton(
                     onPressed: () =>
-                        context.go(RoutePaths.seriesOf(series.id)),
+                        context.push(RoutePaths.seriesOf(series.id)),
                     child: const Text('查看系列'),
                   ),
               ],
@@ -241,7 +244,7 @@ class StickerDetailPage extends ConsumerWidget {
     // `mounted` 特判），故此处做针对性忽略。
     if (!contextIsAlive(context)) return;
     showToast(context, '已移入回收站');
-    context.go(RoutePaths.seriesOf(sticker.seriesId));
+    context.pop();
   }
 }
 
