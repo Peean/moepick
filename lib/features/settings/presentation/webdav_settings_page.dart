@@ -186,6 +186,30 @@ class _WebDavSettingsPageState extends ConsumerState<WebDavSettingsPage> {
                   busy: _busy,
                   onSync: _syncNow,
                 ),
+
+                const SectionHeader(
+                  '手动备份',
+                  subtitle: '把当前库完整备份上传到服务器，或从服务器拉取备份恢复',
+                ),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _busy ? null : _uploadBackup,
+                        icon: const Icon(Icons.upload_outlined),
+                        label: const Text('上传备份'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _pullBackup,
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Text('拉取备份'),
+                      ),
+                    ),
+                  ],
+                ),
               ],
 
               const SizedBox(height: 24),
@@ -304,6 +328,70 @@ class _WebDavSettingsPageState extends ConsumerState<WebDavSettingsPage> {
       // 这与本地编辑发出的信号相同。
       if (report.outcome == SyncOutcome.pulled ||
           report.outcome == SyncOutcome.conflictResolvedRemote) {
+        ref.read(dataVersionProvider.notifier).bump();
+      }
+
+      if (mounted) {
+        showToast(context, report.message, isError: report.isError);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Force-upload the current library as a backup, overwriting the server copy.
+  /// 强制把当前库上传为备份，覆盖服务器副本。
+  Future<void> _uploadBackup() async {
+    final WebDavCredentials credentials = _collect();
+    if (!credentials.isConfigured) {
+      showToast(context, '请先填写服务器地址和用户名', isError: true);
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final SyncReport report = await ref
+          .read(syncControllerProvider.notifier)
+          .uploadBackup(credentials);
+      if (mounted) {
+        showToast(context, report.message, isError: report.isError);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Force-download the server backup and replace the local library with it.
+  /// 强制从服务器下载备份并替换本地库。
+  ///
+  /// This overwrites local data, so it must be confirmed first.
+  /// 这会覆盖本地数据，因此必须先确认。
+  Future<void> _pullBackup() async {
+    final WebDavCredentials credentials = _collect();
+    if (!credentials.isConfigured) {
+      showToast(context, '请先填写服务器地址和用户名', isError: true);
+      return;
+    }
+
+    final bool ok = await confirm(
+      context,
+      title: '从服务器拉取备份',
+      message: '将用服务器上的备份**替换**本地全部数据，'
+          '本地尚未上传的改动会丢失。\n建议先执行一次「上传备份」留底。',
+      confirmLabel: '拉取并覆盖',
+      destructive: true,
+    );
+    if (!ok) return;
+
+    setState(() => _busy = true);
+    try {
+      final SyncReport report = await ref
+          .read(syncControllerProvider.notifier)
+          .pullBackup(credentials);
+
+      // A pull replaced the library; refresh every derived provider.
+      // 拉取替换了库；刷新全部派生 provider。
+      if (report.outcome == SyncOutcome.pulled) {
         ref.read(dataVersionProvider.notifier).bump();
       }
 

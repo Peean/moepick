@@ -232,6 +232,95 @@ class WebDavSyncService {
     }
   }
 
+  /// Force-upload the current library as a backup, overwriting the server copy.
+  /// 强制将当前库打包上传为备份，覆盖服务器上的副本。
+  ///
+  /// Unlike [sync], this ignores the fingerprint comparison entirely — it is
+  /// the explicit "push my data now" the user asked for, and is the right tool
+  /// after a big reorganisation or before switching devices.
+  ///
+  /// 与 [sync] 不同，此方法完全无视指纹比对——它是用户明确要求的「立即把我的
+  /// 数据推上去」，适合在大量整理之后、或换设备之前使用。
+  Future<SyncReport> uploadBackup(WebDavCredentials credentials) async {
+    if (!credentials.isConfigured) {
+      return const SyncReport(
+        outcome: SyncOutcome.skipped,
+        message: '未配置 WebDAV',
+      );
+    }
+
+    final SyncMeta meta = _store.readSyncMeta();
+    final String deviceId =
+        meta.deviceId.isEmpty ? IdUtils.newId() : meta.deviceId;
+    final webdav.Client client = _client(credentials);
+    final String root = _normalizeRoot(credentials.remoteRoot);
+
+    try {
+      await _ensureRemoteRoot(client, root);
+      final String fingerprint = BackupService(_store).contentFingerprint();
+      return _push(
+        client: client,
+        snapshotPath: '$root/$snapshotName',
+        metaPath: '$root/$metaName',
+        deviceId: deviceId,
+        fingerprint: fingerprint,
+        reportMessage: '备份已上传到服务器',
+      );
+    } catch (e) {
+      return SyncReport(
+        outcome: SyncOutcome.failed,
+        message: _friendlyError(e),
+      );
+    }
+  }
+
+  /// Force-download the server backup and replace the local library with it.
+  /// 强制从服务器下载备份并用它替换本地库。
+  ///
+  /// This is the explicit "restore from server" the user asked for: it does not
+  /// consult the fingerprint, it simply takes whatever is on the server and
+  /// overwrites the local library. The caller must confirm with the user first.
+  ///
+  /// 这是用户明确要求的「从服务器恢复」：不咨询指纹，直接取服务器上的内容覆盖
+  /// 本地库。调用方必须先向用户确认。
+  Future<SyncReport> pullBackup(WebDavCredentials credentials) async {
+    if (!credentials.isConfigured) {
+      return const SyncReport(
+        outcome: SyncOutcome.skipped,
+        message: '未配置 WebDAV',
+      );
+    }
+
+    final SyncMeta meta = _store.readSyncMeta();
+    final String deviceId =
+        meta.deviceId.isEmpty ? IdUtils.newId() : meta.deviceId;
+    final webdav.Client client = _client(credentials);
+    final String root = _normalizeRoot(credentials.remoteRoot);
+
+    try {
+      await _ensureRemoteRoot(client, root);
+      final _RemoteMeta? remote =
+          await _readRemoteMeta(client, '$root/$metaName');
+      if (remote == null) {
+        return const SyncReport(
+          outcome: SyncOutcome.failed,
+          message: '服务器上还没有备份，请先上传一次',
+        );
+      }
+      return _pull(
+        client: client,
+        snapshotPath: '$root/$snapshotName',
+        deviceId: deviceId,
+        remote: remote,
+      );
+    } catch (e) {
+      return SyncReport(
+        outcome: SyncOutcome.failed,
+        message: _friendlyError(e),
+      );
+    }
+  }
+
   /// Upload the local library and update the remote metadata.
   /// 上传本地库并更新远端元数据。
   Future<SyncReport> _push({

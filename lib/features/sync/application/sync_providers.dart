@@ -138,6 +138,20 @@ class SyncController extends Notifier<SyncStatus> {
         .testConnection(credentials);
   }
 
+  /// Force-upload the library as a backup (overwrites the server copy).
+  /// 强制将库上传为备份（覆盖服务器副本）。
+  Future<SyncReport> uploadBackup(WebDavCredentials credentials) {
+    return WebDavSyncService(ref.read(hiveStoreProvider))
+        .uploadBackup(credentials);
+  }
+
+  /// Force-download the server backup and replace the local library.
+  /// 强制下载服务器备份并替换本地库。
+  Future<SyncReport> pullBackup(WebDavCredentials credentials) {
+    return WebDavSyncService(ref.read(hiveStoreProvider))
+        .pullBackup(credentials);
+  }
+
   void _scheduleAutoSync() {
     _debounce ??= Debouncer(AppConstants.syncDebounce);
     _debounce!.run(() {
