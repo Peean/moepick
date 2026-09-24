@@ -133,6 +133,26 @@ class AppTheme {
           ),
         ),
       ),
+      // Outlined buttons sit next to elevated ones in several screens (e.g.
+      // 「测试连接/保存」「上传备份/拉取备份」). Without a matching theme they
+      // fall back to Flutter's smaller default padding and end up shorter than
+      // their neighbour — the reported "two adjacent buttons with different
+      // sizes". Keep every parameter identical to the elevated theme so pairs
+      // always align.
+      // Outlined 按钮在多个页面与 Elevated 按钮并排（如「测试连接/保存」
+      // 「上传备份/拉取备份」）。若缺少配套主题，会回退到 Flutter 更小的默认
+      // padding，比旁边的按钮矮——即用户反馈的「相邻两按钮大小不一致」。
+      // 各参数与 Elevated 主题保持一致，使成对按钮始终对齐。
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          primary: scheme.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          side: BorderSide(color: scheme.primary.withOpacity(0.45)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(primary: scheme.primary),
       ),

@@ -620,21 +620,30 @@ class _ImageActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
+    // Row + Expanded instead of Wrap: a lone button would otherwise shrink to
+    // its content and sit awkwardly on the left; filling the row keeps the
+    // layout balanced, and the pair splits evenly when a second action exists.
+    // 用 Row + Expanded 而非 Wrap：单个按钮会缩成内容宽并尴尬地靠左；
+    // 占满整行让布局平衡，存在第二个操作时两者均分。
+    return Row(
       children: <Widget>[
-        ElevatedButton.icon(
-          onPressed: busy ? null : onPick,
-          icon: const Icon(Icons.add_photo_alternate_outlined),
-          label: Text(hasImage ? '更换图片' : '选择图片'),
-        ),
-        if (onClear != null)
-          OutlinedButton.icon(
-            onPressed: busy ? null : onClear,
-            icon: const Icon(Icons.delete_outline),
-            label: const Text('移除'),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: busy ? null : onPick,
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+            label: Text(hasImage ? '更换图片' : '选择图片'),
           ),
+        ),
+        if (onClear != null) ...<Widget>[
+          const SizedBox(width: 10),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: busy ? null : onClear,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('移除'),
+            ),
+          ),
+        ],
       ],
     );
   }

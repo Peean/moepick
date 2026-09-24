@@ -150,16 +150,25 @@ class _WebDavSettingsPageState extends ConsumerState<WebDavSettingsPage> {
               Row(
                 children: <Widget>[
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: _busy ? null : _testConnection,
-                      child: const Text('测试连接'),
+                    // Fixed height so the pair stays perfectly level regardless
+                    // of each button's intrinsic content height.
+                    // 固定高度，使成对按钮不因各自内容高度差异而错位。
+                    child: SizedBox(
+                      height: 46,
+                      child: OutlinedButton(
+                        onPressed: _busy ? null : _testConnection,
+                        child: const Text('测试连接'),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: _busy ? null : _save,
-                      child: const Text('保存'),
+                    child: SizedBox(
+                      height: 46,
+                      child: ElevatedButton(
+                        onPressed: _busy ? null : _save,
+                        child: const Text('保存'),
+                      ),
                     ),
                   ),
                 ],
@@ -194,18 +203,24 @@ class _WebDavSettingsPageState extends ConsumerState<WebDavSettingsPage> {
                 Row(
                   children: <Widget>[
                     Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _busy ? null : _uploadBackup,
-                        icon: const Icon(Icons.upload_outlined),
-                        label: const Text('上传备份'),
+                      child: SizedBox(
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          onPressed: _busy ? null : _uploadBackup,
+                          icon: const Icon(Icons.upload_outlined),
+                          label: const Text('上传备份'),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _busy ? null : _pullBackup,
-                        icon: const Icon(Icons.download_outlined),
-                        label: const Text('拉取备份'),
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton.icon(
+                          onPressed: _busy ? null : _pullBackup,
+                          icon: const Icon(Icons.download_outlined),
+                          label: const Text('拉取备份'),
+                        ),
                       ),
                     ),
                   ],

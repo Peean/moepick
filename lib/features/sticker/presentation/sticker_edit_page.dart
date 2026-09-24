@@ -155,6 +155,12 @@ class _StickerEditPageState extends ConsumerState<StickerEditPage> {
             label: const Text('删除这张表情包'),
             style: OutlinedButton.styleFrom(
               primary: Theme.of(context).colorScheme.error,
+              // Keep the outline in step with the destructive text colour,
+              // now that the theme defines a themed side for outlined buttons.
+              // 主题为 Outlined 按钮定义了边框后，需保持边框与红色文字一致。
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.error.withOpacity(0.45),
+              ),
             ),
           ),
         ],
