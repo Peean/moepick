@@ -139,6 +139,10 @@ class _CategoryTab extends ConsumerWidget {
     await ref
         .read(taxonomyRepositoryProvider)
         .saveCategoryWithName(name.trim());
+    // The list providers watch the data version, so a create must bump it too —
+    // otherwise the new category is written but never shows up in the list.
+    // 列表 provider 监听数据版本，因此新建也必须自增——否则新分类已写入却不会显示。
+    ref.read(dataVersionProvider.notifier).bump();
     // `showToast` reads Theme from the context, so re-check liveness first.
     // `showToast` 会从 context 读取 Theme，因此先重新校验存活性。
     // `contextIsAlive` flips to false the moment the element is deactivated, so the
@@ -361,6 +365,9 @@ class _TagTab extends ConsumerWidget {
     );
     if (name == null || name.trim().isEmpty) return;
     await ref.read(taxonomyRepositoryProvider).ensureTag(name.trim());
+    // Same as category creation: bump the data version so the tag list refreshes.
+    // 同新建分类：自增数据版本，使标签列表刷新。
+    ref.read(dataVersionProvider.notifier).bump();
     // `contextIsAlive` flips to false the moment the element is deactivated, so the
     // context below is provably live. The analyzer cannot see through the helper
     // (it only special-cases the literal name `mounted`), hence the targeted ignore.
