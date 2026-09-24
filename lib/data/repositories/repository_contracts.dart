@@ -88,6 +88,16 @@ abstract class TaxonomyRepository {
   Future<void> saveTag(Tag tag);
   Future<void> deleteTag(String id);
 
+  /// Create a category with a default colour and return its id.
+  /// 以默认颜色创建分类并返回其 id。
+  ///
+  /// Convenience for the inline "new category" affordance, which only ever
+  /// asks for a name. Colour and ordering are adjusted later on the taxonomy
+  /// screen.
+  /// 供内联「新建分类」入口使用的便捷方法，该入口只询问名称。
+  /// 颜色与排序可在分类体系页稍后调整。
+  Future<String> saveCategoryWithName(String name);
+
   List<Category> getCategoriesIncludingDeleted();
   List<Tag> getAllTagsIncludingDeleted();
 

@@ -1,115 +1,139 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+import 'core/constants/app_constants.dart';
+import 'core/error/app_exception.dart';
+import 'core/storage/hive_store.dart';
+import 'core/storage/secure_store.dart';
+import 'core/utils/path_utils.dart';
+import 'features/settings/application/storage_providers.dart';
+import 'moepick_app.dart';
 
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+/// Entry point.
+/// 应用入口。
+///
+/// Heavy initialisation happens *before* `runApp`, and the results are injected
+/// through provider overrides rather than having each provider do its own async
+/// open. Reasons:
+///
+///   1. A single, explicit startup sequence is far easier to reason about than
+///      N lazily-opening providers.
+///   2. Hive boxes must be open before the first frame reads them; otherwise the
+///      first paint shows defaults and then flickers to real values.
+///
+/// 重量级初始化在 `runApp` **之前**完成，结果通过 provider override 注入，
+/// 而不是让每个 provider 各自异步打开。原因：
+///
+///   1. 单一、显式的启动流程远比 N 个惰性打开的 provider 易于理解。
+///   2. Hive box 必须在首帧读取之前打开；否则首帧显示默认值，随后闪烁为真实值。
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+  // Route every framework error into a log file as well as the console, so a
+  // crash on a machine without a terminal still leaves a full stack trace.
+  // 把所有框架错误同时写入日志文件，使无终端环境下的崩溃也留有完整堆栈。
+  final File errorLog = File(
+    '${await PathUtils.rootPath()}${Platform.pathSeparator}error.log',
+  );
+  Future<void> log(Object detail, StackTrace? stack) async {
+    try {
+      await errorLog.writeAsString(
+        '$detail\n$stack\n\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+    } catch (_) {}
+    debugPrint('$detail\n$stack');
+  }
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    log(
+      'FLUTTER ERROR: ${details.exception}',
+      details.stack ?? StackTrace.current,
     );
+    FlutterError.presentError(details);
+  };
+
+  final HiveStore hiveStore;
+  try {
+    hiveStore = await HiveStore.open();
+  } catch (e) {
+    // The app cannot function without its database. Show a real message instead
+    // of a white screen or a red error box.
+    // 没有数据库应用无法工作。展示真实提示，而不是白屏或红色报错框。
+    runApp(_StartupFailureApp(error: e));
+    return;
   }
+
+  runApp(
+    ProviderScope(
+      overrides: <Override>[
+        hiveStoreProvider.overrideWithValue(hiveStore),
+        // Constructed eagerly so the degraded-storage flag is known before the
+        // settings screen asks for it.
+        // 提前构造，使降级存储标记在设置页请求之前就已确定。
+        secureStoreProvider.overrideWithValue(SecureStore()),
+      ],
+      child: const MoePickApp(),
+    ),
+  );
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key, required this.title}) : super(key: key);
+/// Minimal app shown when start-up fails.
+/// 启动失败时展示的最小应用。
+///
+/// Deliberately does not use the full app shell: the shell depends on the very
+/// providers that just failed to initialise.
+/// 有意不使用完整应用外壳：外壳依赖的正是刚刚初始化失败的 provider。
+class _StartupFailureApp extends StatelessWidget {
+  const _StartupFailureApp({required this.error});
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  final Object error;
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+    final String detail =
+        error is AppException ? (error as AppException).message : '$error';
+
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: AppConstants.appName,
+      theme: ThemeData(useMaterial3: false),
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Icon(Icons.error_outline, size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  '${AppConstants.appName} 启动失败',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  detail,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(height: 1.5),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '请尝试重启应用；若问题持续，可能是本地数据目录不可写。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }

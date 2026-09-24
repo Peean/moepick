@@ -15,6 +15,12 @@ class AppConstants {
   /// 文档目录下的根文件夹名。
   static const String dataRootDir = 'moepick';
 
+  /// Version string shown on the about screen. Kept in sync with pubspec by
+  /// hand: pulling it from the platform channel would be overkill for a label.
+  /// 关于页展示的版本号。与 pubspec 手工同步：
+  /// 为了一个标签去走平台通道得不偿失。
+  static const String appVersion = '1.0.0';
+
   /// Backup schema version understood by this build.
   /// 本版本可识别的备份 schema 版本。
   static const int backupSchemaVersion = 1;

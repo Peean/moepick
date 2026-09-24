@@ -40,6 +40,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setCompactCards(bool value) =>
       _update(state.copyWith(compactCards: value));
 
+  /// Probe hook: reassign state without touching disk, so tests can tell the
+  /// rebuild path apart from the I/O path.
+  /// 探针钩子：只重设 state 不写盘，使测试能区分重建路径与 I/O 路径。
+  @visibleForTesting
+  void debugSetStateOnly(AppSettings next) => state = next;
+
   Future<void> _update(AppSettings next) async {
     state = next;
     await ref.read(hiveStoreProvider).writeSettings(next);

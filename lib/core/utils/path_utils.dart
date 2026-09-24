@@ -106,6 +106,27 @@ class PathUtils {
   static Future<File> resolve(String relative) async =>
       File(await absolute(relative));
 
+  /// Synchronous variant of [absolute], usable only once the root is cached
+  /// (i.e. after app start-up has resolved it).
+  /// [absolute] 的同步版本，仅在根路径已缓存后可用（即应用启动完成解析后）。
+  ///
+  /// Exists so hot paths such as grid item builders do not have to await the
+  /// root inside a `FutureBuilder`, which would add a frame of blank content
+  /// per tile during scrolling.
+  ///
+  /// 存在的目的是让网格 item builder 等热路径不必在 `FutureBuilder` 中等待根路径，
+  /// 否则滚动时每个瓦片都会多出一帧空白。
+  static String absoluteSync(String relative) {
+    if (p.isAbsolute(relative)) return relative;
+    final String root = _cachedRoot ?? '';
+    if (root.isEmpty) return relative;
+    return p.join(root, relative);
+  }
+
+  /// Whether the root has already been resolved and cached.
+  /// 根路径是否已解析并缓存。
+  static bool get hasCachedRoot => (_cachedRoot ?? '').isNotEmpty;
+
   /// Relative path for an image belonging to [id].
   /// 属于 [id] 的图片的相对路径。
   static String imageRelativePath(String id, String extension) =>

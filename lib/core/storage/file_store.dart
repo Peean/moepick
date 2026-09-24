@@ -70,9 +70,22 @@ class FileStore {
     final String hash = HashUtils.ofBytes(raw);
     final String? duplicateId = existingHashes[hash];
     if (duplicateId != null) {
-      throw ImageException('该图片已在库中（stickerId=$duplicateId）');
-      // Callers translate this into a user-facing "skipped duplicate" notice.
-      // 调用方据此向用户提示「已跳过重复项」。
+      // Return rather than throw: a duplicate is an ordinary, expected outcome
+      // when the user re-imports a folder, not an error condition. Throwing
+      // would force every caller into a try/catch that just counts skips.
+      // 返回而非抛异常：用户重复导入同一批文件时，重复是正常且可预期的结果，
+      // 不是错误状态。抛异常会迫使每个调用方写只为统计跳过的 try/catch。
+      return ImportOutcome(
+        wasDuplicate: true,
+        duplicateOfId: duplicateId,
+        sticker: Sticker(
+          id: duplicateId,
+          seriesId: seriesId,
+          relativePath: '',
+          createdAt: DateUtils.nowUtc(),
+          updatedAt: DateUtils.nowUtc(),
+        ),
+      );
     }
 
     final DecodedImageInfo decoded = await ImageUtils.decode(source);

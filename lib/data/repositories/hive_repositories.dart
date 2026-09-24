@@ -200,6 +200,59 @@ class HiveTaxonomyRepository implements TaxonomyRepository {
   }
 
   @override
+  Future<String> saveCategoryWithName(String name) async {
+    final String cleaned = name.trim();
+    if (cleaned.isEmpty) return '';
+
+    // Reuse an existing category with the same name instead of creating a
+    // duplicate: the inline creation path cannot show the full list, so the
+    // user may well be re-adding something that already exists.
+    // 复用同名分类而非创建重复项：内联创建路径无法展示完整列表，
+    // 用户很可能是在重复添加已有的分类。
+    final String lower = cleaned.toLowerCase();
+    for (final Category c in _categories.values) {
+      if (c.isDeleted) continue;
+      if (c.name.toLowerCase() == lower) return c.id;
+    }
+
+    // Place new categories at the end of the manual ordering.
+    // 将新分类排在手工排序的末尾。
+    int maxIndex = 0;
+    for (final Category c in _categories.values) {
+      if (c.sortIndex > maxIndex) maxIndex = c.sortIndex;
+    }
+
+    final Category created = Category(
+      id: IdUtils.newId(),
+      name: cleaned,
+      colorValue: _nextCategoryColor(),
+      sortIndex: maxIndex + 1,
+      updatedAt: DateUtils.nowUtc(),
+    );
+    await _categories.put(created.id, created);
+    return created.id;
+  }
+
+  /// Cycle through a fixed palette so consecutive categories look distinct.
+  /// 在固定色板中循环，使相邻创建的分类颜色互不相同。
+  int _nextCategoryColor() {
+    final int live =
+        _categories.values.where((Category c) => !c.isDeleted).length;
+    return _categoryPalette[live % _categoryPalette.length];
+  }
+
+  static const List<int> _categoryPalette = <int>[
+    0xFF7E9CD8,
+    0xFFE38FB1,
+    0xFF5FBF9F,
+    0xFFE8945F,
+    0xFF9B8FE0,
+    0xFFD9B53F,
+    0xFFE07070,
+    0xFF6E7A88,
+  ];
+
+  @override
   Future<void> deleteCategory(String id) async {
     final Category? existing = _categories.get(id);
     if (existing == null) return;

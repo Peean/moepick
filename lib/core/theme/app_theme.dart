@@ -27,6 +27,15 @@ class AppTheme {
     ThemePreset('石墨', 0xFF6E7A88),
   ];
 
+  /// The preset matching [colorValue], or null when it is a custom colour.
+  /// 与 [colorValue] 匹配的预设；若为自定义颜色则返回 null。
+  static ThemePreset? presetFor(int colorValue) {
+    for (final ThemePreset preset in presets) {
+      if (preset.colorValue == colorValue) return preset;
+    }
+    return null;
+  }
+
   /// Build a light or dark theme around [seedColor].
   /// 围绕 [seedColor] 构建浅色或深色主题。
   static ThemeData build({
