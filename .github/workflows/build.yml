@@ -1,0 +1,105 @@
+name: build
+
+# 全平台构建：Android APK、Linux 桌面、Windows 桌面。
+# 触发：推送到 main、打 v* 标签，或手动在 Actions 页面点「Run workflow」。
+# 产物上传为 artifact，可在 Actions 页面下载；不自动发 release（避免额外权限）。
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # Gradle 7.4 需要 JDK 11-17（不支持 18+）。
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Flutter 3.0.0 与 pubspec.lock 锁定版本一致。
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.0.0'
+          channel: stable
+          cache: true
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      - name: 构建 APK
+        run: flutter build apk --release
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: moepick-android
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  linux:
+    name: Linux 桌面
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.0.0'
+          channel: stable
+          cache: true
+
+      # Linux 桌面构建需要 GTK3 开发库与 ninja。
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      - name: 构建 Linux 桌面
+        run: flutter build linux --release
+
+      - name: 上传 Linux 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: moepick-linux
+          path: build/linux/x64/release/bundle
+
+  windows:
+    name: Windows 桌面
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.0.0'
+          channel: stable
+          cache: true
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      # windows-latest runner 预装 Visual Studio 2022 + C++ 桌面工作负载，
+      # 可直接构建 Windows 桌面端。
+      - name: 构建 Windows 桌面
+        run: flutter build windows --release
+
+      - name: 上传 Windows 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: moepick-windows
+          path: build/windows/x64/runner/Release
