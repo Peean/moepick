@@ -98,9 +98,21 @@ jobs:
       - name: 安装依赖
         run: flutter pub get
 
+      # 诊断工具链：确认 Visual Studio 2022 与 C++ 组件是否就绪。
+      - name: 诊断工具链
+        run: flutter doctor -v
+
       # windows-2022 runner 预装 Visual Studio 2022 + C++ 桌面工作负载。
       - name: 构建 Windows 桌面
         run: flutter build windows --release
+
+      # 列出 build 目录，便于定位产物实际路径。
+      - name: 列出产物
+        run: |
+          echo "=== build/windows 目录树 ==="
+          find build/windows -maxdepth 4 -type d 2>/dev/null || true
+          echo "=== exe / dll 文件 ==="
+          find build/windows -name "*.exe" -o -name "*.dll" 2>/dev/null | head -50 || true
 
       - name: 上传 Windows 产物
         uses: actions/upload-artifact@v4
