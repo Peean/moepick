@@ -70,13 +70,24 @@ class LibraryActions {
   /// leaving them live would let them reappear as orphans on another device.
   /// 表情包同样软删除，使同步能传播删除操作；
   /// 若保持存活，它们会在其他设备上作为孤儿记录重新出现。
-  Future<void> deleteSeries(String seriesId) async {
-    final List<Sticker> children =
-        _ref.read(stickerRepositoryProvider).getBySeries(seriesId);
-    for (final Sticker s in children) {
-      await _ref.read(stickerRepositoryProvider).softDelete(s.id);
+  Future<void> deleteSeries(String seriesId) =>
+      deleteSeriesBatch(<String>[seriesId]);
+
+  /// Soft-delete several series (and their stickers) in one pass, bumping the
+  /// data version exactly once.
+  /// 一次软删除多个系列（及其表情包），仅自增一次数据版本。
+  Future<void> deleteSeriesBatch(List<String> seriesIds) async {
+    if (seriesIds.isEmpty) return;
+    final StickerRepository stickers = _ref.read(stickerRepositoryProvider);
+    final SeriesRepository seriesRepo = _ref.read(seriesRepositoryProvider);
+
+    for (final String seriesId in seriesIds) {
+      final List<Sticker> children = stickers.getBySeries(seriesId);
+      for (final Sticker s in children) {
+        await stickers.softDelete(s.id);
+      }
+      await seriesRepo.softDelete(seriesId);
     }
-    await _ref.read(seriesRepositoryProvider).softDelete(seriesId);
     _bump();
   }
 

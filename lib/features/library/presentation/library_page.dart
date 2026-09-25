@@ -52,6 +52,45 @@ class LibraryPage extends ConsumerStatefulWidget {
 class _LibraryPageState extends ConsumerState<LibraryPage> {
   DateTime? _lastBackPressed;
 
+  /// Multi-select mode, entered by long-pressing a series card.
+  /// 多选模式，由长按系列卡片进入。
+  bool _selectionMode = false;
+  final Set<String> _selected = <String>{};
+
+  void _enterSelection(String seriesId) {
+    setState(() {
+      _selectionMode = true;
+      _selected.clear();
+      _selected.add(seriesId);
+    });
+  }
+
+  void _toggle(String seriesId) {
+    setState(() {
+      if (!_selected.remove(seriesId)) _selected.add(seriesId);
+      if (_selected.isEmpty) _selectionMode = false;
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _selectionMode = false;
+      _selected.clear();
+    });
+  }
+
+  void _toggleSelectAll(List<Series> all) {
+    setState(() {
+      if (_selected.length == all.length) {
+        _selected.clear();
+      } else {
+        _selected
+          ..clear()
+          ..addAll(all.map((Series s) => s.id));
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Series> seriesList = ref.watch(seriesListProvider);
@@ -66,25 +105,55 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       onWillPop: _onWillPop,
       child: MoeScaffold(
         appBar: AppBar(
-          title: const Text('拾萌'),
-          actions: <Widget>[
-            IconButton(
-              tooltip: '搜索',
-              icon: const Icon(Icons.search),
-              onPressed: () => context.go(RoutePaths.search),
-            ),
-            IconButton(
-              tooltip: '设置',
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: () => context.go(RoutePaths.settings),
-            ),
-          ],
+          title: Text(_selectionMode ? '已选 ${_selected.length} 项' : '拾萌'),
+          leading: _selectionMode
+              ? IconButton(
+                  tooltip: '取消多选',
+                  icon: const Icon(Icons.close),
+                  onPressed: _exitSelection,
+                )
+              : null,
+          actions: _selectionMode
+              ? <Widget>[
+                  IconButton(
+                    tooltip: _selected.length == seriesList.length
+                        ? '取消全选'
+                        : '全选',
+                    icon: const Icon(Icons.select_all_outlined),
+                    onPressed: () => _toggleSelectAll(seriesList),
+                  ),
+                  IconButton(
+                    tooltip: '删除所选',
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: _selected.isEmpty
+                          ? null
+                          : Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed:
+                        _selected.isEmpty ? null : () => _deleteSelected(),
+                  ),
+                ]
+              : <Widget>[
+                  IconButton(
+                    tooltip: '搜索',
+                    icon: const Icon(Icons.search),
+                    onPressed: () => context.go(RoutePaths.search),
+                  ),
+                  IconButton(
+                    tooltip: '设置',
+                    icon: const Icon(Icons.settings_outlined),
+                    onPressed: () => context.go(RoutePaths.settings),
+                  ),
+                ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _createSeries(context, ref),
-          icon: const Icon(Icons.add),
-          label: const Text('新建系列'),
-        ),
+        floatingActionButton: _selectionMode
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () => _createSeries(context, ref),
+                icon: const Icon(Icons.add),
+                label: const Text('新建系列'),
+              ),
         body: seriesList.isEmpty
             ? EmptyState(
                 icon: Icons.collections_outlined,
@@ -104,7 +173,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                       child: Text(
-                        '${seriesList.length} 个系列 · $stickerCount 个表情包',
+                        _selectionMode
+                            ? '点按选择或取消，长按进入多选'
+                            : '${seriesList.length} 个系列 · $stickerCount 个表情包',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Theme.of(context)
                                   .colorScheme
@@ -129,8 +200,22 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                           final Series series = seriesList[index];
                           return SeriesCard(
                             series: series,
-                            onTap: () => context
-                                .push(RoutePaths.seriesOf(series.id)),
+                            selected: _selectionMode &&
+                                _selected.contains(series.id),
+                            onTap: () {
+                              if (_selectionMode) {
+                                _toggle(series.id);
+                              } else {
+                                context.push(RoutePaths.seriesOf(series.id));
+                              }
+                            },
+                            onLongPress: () {
+                              if (_selectionMode) {
+                                _toggle(series.id);
+                              } else {
+                                _enterSelection(series.id);
+                              }
+                            },
                           );
                         },
                         childCount: seriesList.length,
@@ -143,9 +228,41 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     );
   }
 
+  Future<void> _deleteSelected() async {
+    final List<Series> all = ref.read(seriesListProvider);
+    final List<Series> chosen =
+        all.where((Series s) => _selected.contains(s.id)).toList();
+    final int count = chosen.length;
+
+    final bool ok = await confirm(
+      context,
+      title: '删除所选系列',
+      message: '将删除选中的 $count 个系列及其中的表情包，'
+          '删除后会移入回收站，可在「设置 → 回收站」中恢复。',
+      confirmLabel: '删除',
+      destructive: true,
+    );
+    if (!ok) return;
+
+    await ref
+        .read(libraryActionsProvider)
+        .deleteSeriesBatch(chosen.map((Series s) => s.id).toList());
+    if (mounted) {
+      _exitSelection();
+      showToast(context, '已将 $count 个系列移入回收站');
+    }
+  }
+
   /// Return true to allow the back event to pop the app.
   /// 返回 true 表示允许返回事件退出应用。
   Future<bool> _onWillPop() async {
+    // Back during multi-select exits selection, not the app.
+    // 多选期间按返回应先退出多选，而非退出应用。
+    if (_selectionMode) {
+      _exitSelection();
+      return false;
+    }
+
     final DateTime now = DateTime.now();
     final bool withinGrace =
         _lastBackPressed != null &&

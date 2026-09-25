@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../error/app_exception.dart';
+import '../utils/hash_utils.dart';
 import '../utils/path_utils.dart';
 
 /// Result of decoding an image: dimensions plus the decoded bytes.
@@ -276,4 +277,89 @@ Future<ui.Image?> blurUiImage(ui.Image source, double sigma) async {
     }
     return null;
   }
+}
+
+/// Arguments for [processImportImage], sent across an isolate boundary so it
+/// must stay a plain serializable class.
+/// [processImportImage] 的参数，需跨 isolate 传递，因此必须是可序列化普通类。
+class ImportProcessRequest {
+  const ImportProcessRequest({
+    required this.bytes,
+    required this.thumbMaxSize,
+  });
+
+  final Uint8List bytes;
+  final int thumbMaxSize;
+}
+
+/// Result of [processImportImage].
+/// [processImportImage] 的结果。
+class ImportProcessResult {
+  const ImportProcessResult({
+    required this.sha256,
+    required this.width,
+    required this.height,
+    this.thumbBytes,
+  });
+
+  final String sha256;
+  final int width;
+  final int height;
+
+  /// JPEG thumbnail bytes, or null when decoding failed (never for a valid
+  /// image, but defensive).
+  /// JPEG 缩略图字节；解码失败时为 null（对有效图片不应发生，属防御性）。
+  final Uint8List? thumbBytes;
+}
+
+/// Top-level isolate worker for a single imported image: hash, measure and
+/// thumbnail in one pass.
+/// 单张导入图片的顶层 isolate 工作函数：一次性完成哈希、取尺寸与缩略图。
+///
+/// WHY THIS EXISTS / 为什么需要它
+///
+/// Decoding and thumbnail encoding are the two hot spots of a batch import.
+/// Doing them on the UI thread made importing several images stutter visibly —
+/// each photo costs tens to hundreds of milliseconds of synchronous CPU.
+/// Moving the whole CPU-heavy pass off-thread leaves only file I/O on the main
+/// isolate.
+///
+/// 解码与缩略图编码是批量导入的两个热点。放在 UI 线程会使导入多张图片时明显卡顿——
+/// 每张要花费数十到数百毫秒的同步 CPU。把整个 CPU 密集步骤移出主线程后，
+/// 主 isolate 只剩文件 I/O。
+ImportProcessResult processImportImage(ImportProcessRequest request) {
+  final String sha256 = HashUtils.ofBytes(request.bytes);
+
+  int width = 0;
+  int height = 0;
+  Uint8List? thumb;
+
+  final img.Image? decoded = img.decodeImage(request.bytes);
+  if (decoded != null) {
+    width = decoded.width;
+    height = decoded.height;
+
+    final int longest =
+        decoded.width > decoded.height ? decoded.width : decoded.height;
+    final img.Image resized = longest <= request.thumbMaxSize
+        ? decoded
+        : img.copyResize(
+            decoded,
+            width: decoded.width >= decoded.height
+                ? request.thumbMaxSize
+                : null,
+            height: decoded.height > decoded.width
+                ? request.thumbMaxSize
+                : null,
+            interpolation: img.Interpolation.average,
+          );
+    thumb = Uint8List.fromList(img.encodeJpg(resized, quality: 82));
+  }
+
+  return ImportProcessResult(
+    sha256: sha256,
+    width: width,
+    height: height,
+    thumbBytes: thumb,
+  );
 }

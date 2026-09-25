@@ -8,7 +8,6 @@ import '../../data/models/sticker.dart';
 import '../constants/app_constants.dart';
 import '../error/app_exception.dart';
 import '../utils/date_utils.dart';
-import '../utils/hash_utils.dart';
 import '../utils/id_utils.dart';
 import '../utils/image_utils.dart';
 import '../utils/path_utils.dart';
@@ -64,10 +63,23 @@ class FileStore {
     final String extension = PathUtils.extensionOf(sourcePath);
     final Uint8List raw = await source.readAsBytes();
 
+    // Hash + decode + thumbnail happen off-thread: they are the CPU hot spots
+    // that made a batch import stutter on the main isolate. The result carries
+    // everything the caller needs, leaving only file I/O here.
+    // 哈希 + 解码 + 缩略图移出主线程：它们正是批量导入时让主 isolate 卡顿的
+    // CPU 热点。结果携带调用方所需的全部信息，这里只剩文件 I/O。
+    final ImportProcessResult processed = await compute(
+      processImportImage,
+      ImportProcessRequest(
+        bytes: raw,
+        thumbMaxSize: AppConstants.thumbnailMaxSize,
+      ),
+    );
+    final String hash = processed.sha256;
+
     // `existingHashes` maps sha256 -> stickerId, letting an import of an
     // already-present image short-circuit before touching the filesystem.
     // `existingHashes` 是 sha256 -> stickerId 的映射，使重复导入可在落盘前短路返回。
-    final String hash = HashUtils.ofBytes(raw);
     final String? duplicateId = existingHashes[hash];
     if (duplicateId != null) {
       // Return rather than throw: a duplicate is an ordinary, expected outcome
@@ -87,8 +99,6 @@ class FileStore {
         ),
       );
     }
-
-    final DecodedImageInfo decoded = await ImageUtils.decode(source);
 
     final String stickerId = IdUtils.newId();
     final String imageRel = PathUtils.imageRelativePath(stickerId, extension);
@@ -110,20 +120,19 @@ class FileStore {
     // Thumbnails are best-effort: a failure here must not lose the original.
     // 缩略图尽力而为：其失败不应导致原图丢失。
     String? thumbRel;
-    try {
-      final Uint8List thumbBytes = ImageUtils.createThumbnailSync(
-        raw,
-        AppConstants.thumbnailMaxSize,
-      );
-      final String thumbPathRel =
-          PathUtils.thumbRelativePath(stickerId, '.jpg');
-      final File thumbFile = File(await PathUtils.absolute(thumbPathRel));
-      await thumbFile.parent.create(recursive: true);
-      await thumbFile.writeAsBytes(thumbBytes, flush: true);
-      thumbRel = thumbPathRel;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[FileStore] thumbnail generation failed: $e');
+    final Uint8List? thumbBytes = processed.thumbBytes;
+    if (thumbBytes != null) {
+      try {
+        final String thumbPathRel =
+            PathUtils.thumbRelativePath(stickerId, '.jpg');
+        final File thumbFile = File(await PathUtils.absolute(thumbPathRel));
+        await thumbFile.parent.create(recursive: true);
+        await thumbFile.writeAsBytes(thumbBytes, flush: true);
+        thumbRel = thumbPathRel;
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[FileStore] thumbnail write failed: $e');
+        }
       }
     }
 
@@ -135,9 +144,9 @@ class FileStore {
         name: name ?? '',
         relativePath: imageRel,
         thumbPath: thumbRel,
-        width: decoded.width,
-        height: decoded.height,
-        byteSize: decoded.byteSize,
+        width: processed.width,
+        height: processed.height,
+        byteSize: raw.length,
         sha256: hash,
         sortIndex: sortIndex,
         createdAt: DateUtils.nowUtc(),

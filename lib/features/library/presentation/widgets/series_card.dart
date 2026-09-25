@@ -17,10 +17,20 @@ class SeriesCard extends ConsumerWidget {
     Key? key,
     required this.series,
     required this.onTap,
+    this.onLongPress,
+    this.selected = false,
   }) : super(key: key);
 
   final Series series;
   final VoidCallback onTap;
+
+  /// Long-press enters multi-select on the home screen.
+  /// 长按在主页进入多选。
+  final VoidCallback? onLongPress;
+
+  /// Whether this card is in the multi-select selection.
+  /// 该卡片是否处于多选选中状态。
+  final bool selected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,79 +53,95 @@ class SeriesCard extends ConsumerWidget {
         .take(2)
         .toList();
 
-    return Material(
-      color: theme.colorScheme.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: theme.colorScheme.onSurface.withOpacity(0.08),
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            // Cover: nine-grid preview built from the first few stickers, which
-            // is far more informative than a single image and needs no
-            // generation step.
-            // 封面：用前几张表情包拼成的九宫格预览，
-            // 比单图信息量更大，且无需额外生成步骤。
-            Expanded(
-              child: _CoverPreview(
-                series: series,
-                stickers: stickers,
-              ),
+    return Stack(
+      children: <Widget>[
+        Material(
+          color: theme.colorScheme.surface,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withOpacity(0.08),
+              width: selected ? 2 : 1,
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    series.name.isEmpty ? '未命名系列' : series.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Expanded(
+                  child: _CoverPreview(
+                    series: series,
+                    stickers: stickers,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    series.stickerCount > 0
-                        ? '${series.stickerCount} 个表情包'
-                        : (stickers.isEmpty ? '空系列' : '${stickers.length} 个表情包'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.55),
-                      fontSize: 11,
-                    ),
-                  ),
-                  if (seriesCategories.isNotEmpty || seriesTags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: <Widget>[
-                        for (final Category c in seriesCategories)
-                          _MiniChip(
-                            label: c.name,
-                            color: Color(c.colorValue),
-                          ),
-                        for (final Tag t in seriesTags)
-                          _MiniChip(
-                            label: t.name,
-                            color: theme.colorScheme.primary,
-                          ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        series.name.isEmpty ? '未命名系列' : series.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        series.stickerCount > 0
+                            ? '${series.stickerCount} 个表情包'
+                            : (stickers.isEmpty ? '空系列' : '${stickers.length} 个表情包'),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.55),
+                          fontSize: 11,
+                        ),
+                      ),
+                      if (seriesCategories.isNotEmpty ||
+                          seriesTags.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: <Widget>[
+                            for (final Category c in seriesCategories)
+                              _MiniChip(
+                                label: c.name,
+                                color: Color(c.colorValue),
+                              ),
+                            for (final Tag t in seriesTags)
+                              _MiniChip(
+                                label: t.name,
+                                color: theme.colorScheme.primary,
+                              ),
+                          ],
+                        ),
                       ],
-                    ),
-                  ],
-                ],
-              ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+        // Selection marker, visible only while the card is selected.
+        // 选中角标，仅在卡片被选中时显示。
+        if (selected)
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Icon(
+              Icons.check_circle,
+              size: 22,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+      ],
     );
   }
 }
