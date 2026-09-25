@@ -27,6 +27,7 @@ import 'package:go_router/go_router.dart';
 import '../../../data/models/series.dart';
 import '../../../data/models/sticker.dart';
 import '../../../routes/route_paths.dart';
+import '../../../shared/widgets/action_sheet.dart';
 import '../../../shared/widgets/common.dart';
 import '../../../shared/widgets/moe_scaffold.dart';
 import '../../../shared/widgets/sticker_tile.dart';
@@ -162,15 +163,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
           // Tab bar is hidden during multi-select so the selection actions are
           // the only thing on screen.
           // 多选期间隐藏标签栏，使选择操作成为界面唯一焦点。
-          bottom: _selectionMode
-              ? null
-              : TabBar(
-                  controller: _tabs,
-                  tabs: const <Widget>[
-                    Tab(text: '图库'),
-                    Tab(text: '收藏'),
-                  ],
-                ),
+          bottom: _selectionMode ? null : _buildPillTabs(),
         ),
         floatingActionButton: _selectionMode
             ? null
@@ -188,6 +181,45 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
                   const _FavoritesTab(),
                 ],
               ),
+      ),
+    );
+  }
+
+  /// A rounded segmented control for the two top-level tabs. The thumb is a
+  /// filled pill that slides between 「图库」 and 「收藏」, which reads far more
+  /// polished than the default underline TabBar.
+  /// 两个顶层标签的圆角分段控件。滑块是一个实心胶囊，在「图库」与「收藏」之间
+  /// 滑动，观感远胜默认的下划线 TabBar。
+  PreferredSizeWidget _buildPillTabs() {
+    final ThemeData theme = Theme.of(context);
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(62),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.onSurface.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Row(
+            children: <Widget>[
+              _PillSegment(
+                controller: _tabs,
+                index: 0,
+                icon: Icons.grid_view_rounded,
+                label: '图库',
+              ),
+              _PillSegment(
+                controller: _tabs,
+                index: 1,
+                icon: Icons.star_rounded,
+                label: '收藏',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -254,7 +286,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
                           if (_selectionMode) {
                             _toggle(series.id);
                           } else {
-                            _enterSelection(series.id);
+                            _showSeriesActions(series);
                           }
                         },
                       );
@@ -265,6 +297,77 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
               ),
             ],
           );
+  }
+
+  /// Long-press a series card: offer pin / favourite / multi-select / delete
+  /// directly, so the user need not open the series to pin or favourite it.
+  /// 长按系列卡片：直接提供置顶 / 收藏 / 多选 / 删除，
+  /// 无需点进系列即可置顶或收藏。
+  Future<void> _showSeriesActions(Series series) async {
+    await showActionSheet(
+      context,
+      title: series.name.isEmpty ? '未命名系列' : series.name,
+      items: <ActionSheetItem>[
+        ActionSheetItem(
+          label: series.pinned ? '取消置顶' : '置顶',
+          icon: series.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+          active: series.pinned,
+          onTap: () => _togglePin(series),
+        ),
+        ActionSheetItem(
+          label: series.favorite ? '取消收藏' : '收藏',
+          icon: series.favorite ? Icons.star : Icons.star_border,
+          active: series.favorite,
+          onTap: () => _toggleFavorite(series),
+        ),
+        ActionSheetItem(
+          label: '多选',
+          icon: Icons.checklist,
+          onTap: () => _enterSelection(series.id),
+        ),
+        ActionSheetItem(
+          label: '删除系列',
+          icon: Icons.delete_outline,
+          destructive: true,
+          onTap: () => _deleteSingle(series),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _togglePin(Series series) async {
+    final bool? result = await ref
+        .read(libraryActionsProvider)
+        .toggleSeriesPin(series.id);
+    if (!mounted) return;
+    if (result == null) {
+      showToast(context, '已达置顶上限，请先取消其他置顶', isError: true);
+    } else {
+      showToast(context, result ? '已置顶' : '已取消置顶');
+    }
+  }
+
+  Future<void> _toggleFavorite(Series series) async {
+    final bool result = await ref
+        .read(libraryActionsProvider)
+        .toggleSeriesFavorite(series.id);
+    if (!mounted) return;
+    showToast(context, result ? '已收藏' : '已取消收藏');
+  }
+
+  Future<void> _deleteSingle(Series series) async {
+    final bool ok = await confirm(
+      context,
+      title: '删除系列',
+      message: '将删除「${series.name}」以及其中的 '
+          '${series.stickerCount} 个表情包，'
+          '删除后会移入回收站。',
+      confirmLabel: '删除',
+      destructive: true,
+    );
+    if (!ok) return;
+    await ref.read(libraryActionsProvider).deleteSeries(series.id);
+    if (mounted) showToast(context, '已删除「${series.name}」');
   }
 
   Future<void> _deleteSelected() async {
@@ -374,6 +477,69 @@ Future<String?> promptForName(
   String hint = '',
 }) =>
     _promptForName(context, title: title, initial: initial, hint: hint);
+
+/// One segment of the top-level pill control. Highlighting follows the
+/// [TabController]'s animation, so it tracks swipes as well as taps.
+/// 顶层胶囊控件的单个分段。高亮跟随 [TabController] 的动画，
+/// 因此既响应点按也响应滑动。
+class _PillSegment extends StatelessWidget {
+  const _PillSegment({
+    required this.controller,
+    required this.index,
+    required this.icon,
+    required this.label,
+  });
+
+  final TabController controller;
+  final int index;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Expanded(
+      child: AnimatedBuilder(
+        animation: controller.animation!,
+        builder: (BuildContext context, Widget? child) {
+          final bool selected = controller.index == index;
+          final Color foreground = selected
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.onSurface.withOpacity(0.65);
+          return GestureDetector(
+            onTap: () => controller.animateTo(index),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(icon, size: 18, color: foreground),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w500,
+                      color: foreground,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
 
 /// Favourites tab: pinned series and stickers marked as favourite.
 /// 收藏标签页：收藏的系列与表情包。

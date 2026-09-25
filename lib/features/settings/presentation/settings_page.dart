@@ -1,13 +1,3 @@
-// ignore_for_file: use_build_context_synchronously
-//
-// `contextIsAlive` (shared/widgets/common.dart) is the Flutter 3.0 stand-in for
-// `BuildContext.mounted`; the analyzer cannot follow the indirection, so this
-// file opts out of the lint for guarded uses (e.g. the pin-limit prompt).
-//
-// `contextIsAlive`（shared/widgets/common.dart）是 `BuildContext.mounted` 在
-// Flutter 3.0 下的等价替代；分析器无法跟随这层间接，因此本文件对守卫用法
-// （如置顶上限输入）关闭该 lint。
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,7 +6,6 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/app_settings.dart';
 import '../../../routes/route_paths.dart';
-import '../../../shared/widgets/common.dart';
 import '../../../shared/widgets/moe_scaffold.dart';
 import '../../library/application/library_providers.dart';
 import '../application/settings_providers.dart';
@@ -147,30 +136,130 @@ class SettingsPage extends ConsumerWidget {
     return '$mode · 不透明度 ${(config.opacity * 100).round()}%$blur';
   }
 
-  /// Prompt for and persist the pin-count limit.
-  /// 询问并持久化置顶数量上限。
+  /// Present a slider sheet for the pin-count limit and persist the result.
+  /// 弹出滑块面板设置置顶数量上限并持久化结果。
   static Future<void> _editPinLimit(
     BuildContext context,
     WidgetRef ref,
     int current,
   ) async {
-    final String? input = await promptForText(
-      context,
-      title: '置顶数量上限',
-      hint: '1-50',
-      initial: '$current',
-      confirmLabel: '保存',
+    final int? value = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (BuildContext ctx) => _PinLimitSheet(current: current),
     );
-    if (input == null) return;
-    final int? value = int.tryParse(input.trim());
-    if (value == null || value < 1 || value > 50) {
-      if (contextIsAlive(context)) {
-        showToast(context, '请输入 1-50 之间的数字', isError: true);
-      }
-      return;
-    }
+    if (value == null) return;
     await ref.read(appSettingsProvider.notifier).setPinLimit(value);
   }
+}
+
+/// Bottom sheet with a slider for the pin limit: drag to preview, tap to keep.
+/// 设置置顶上限的滑块底部面板：拖动预览，点按保存。
+class _PinLimitSheet extends StatefulWidget {
+  const _PinLimitSheet({required this.current});
+
+  final int current;
+
+  @override
+  State<_PinLimitSheet> createState() => _PinLimitSheetState();
+}
+
+class _PinLimitSheetState extends State<_PinLimitSheet> {
+  late double _value = widget.current.toDouble();
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    '置顶数量上限',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '关闭',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            Text(
+              '系列与表情包分别计数，超过上限的新置顶会提示先取消其他置顶',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // The value is the focal point: large and primary-coloured, so the
+            // current limit reads at a glance while dragging.
+            // 数值是视觉焦点：大号且用主色，拖动时一眼可见当前上限。
+            Center(
+              child: Text(
+                '${_value.round()}',
+                style: theme.textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+            Slider(
+              value: _value,
+              min: 1,
+              max: 50,
+              divisions: 49,
+              label: '${_value.round()}',
+              onChanged: (double v) => setState(() => _value = v),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                Text('1', style: _scaleLabel(theme)),
+                Text('50', style: _scaleLabel(theme)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () =>
+                        Navigator.of(context).pop(_value.round()),
+                    child: const Text('保存'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static TextStyle? _scaleLabel(ThemeData theme) =>
+      theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurface.withOpacity(0.45),
+      );
 }
 
 /// Compact row of counts so the hub immediately conveys library size.

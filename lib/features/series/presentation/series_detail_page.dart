@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/platform/image_picker_service.dart';
 import '../../../core/utils/path_utils.dart';
@@ -12,6 +13,7 @@ import '../../../data/models/series.dart';
 import '../../../data/models/sticker.dart';
 import '../../../data/models/tag.dart';
 import '../../../routes/route_paths.dart';
+import '../../../shared/widgets/action_sheet.dart';
 import '../../../shared/widgets/common.dart';
 import '../../../shared/widgets/moe_scaffold.dart';
 import '../../../shared/widgets/sticker_tile.dart';
@@ -255,7 +257,7 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
                     ),
                     const Spacer(),
                     Text(
-                      _selectionMode ? '点按选择或取消，右上角可改名或删除' : '点按查看详情，长按进入多选',
+                      _selectionMode ? '点按选择或取消，右上角可改名或删除' : '点按查看详情，长按快捷操作',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context)
                                 .colorScheme
@@ -283,7 +285,7 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
                   if (_selectionMode) {
                     _toggleSelection(s.id);
                   } else {
-                    _enterSelection(s.id);
+                    _showStickerActions(s);
                   }
                 },
               ),
@@ -353,6 +355,102 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
       _exitSelection();
       showToast(context, '已将 $count 个表情包移入回收站');
     }
+  }
+
+  /// Long-press a sticker tile: offer pin / favourite / share / multi-select /
+  /// delete directly, so the user need not open the sticker to act on it.
+  /// 长按表情包瓦片：直接提供置顶 / 收藏 / 分享 / 多选 / 删除，
+  /// 无需点进表情包即可操作。
+  Future<void> _showStickerActions(Sticker sticker) async {
+    await showActionSheet(
+      context,
+      title: sticker.name.isEmpty ? '表情包' : sticker.name,
+      items: <ActionSheetItem>[
+        ActionSheetItem(
+          label: sticker.pinned ? '取消置顶' : '置顶',
+          icon: sticker.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+          active: sticker.pinned,
+          onTap: () => _toggleStickerPin(sticker),
+        ),
+        ActionSheetItem(
+          label: sticker.favorite ? '取消收藏' : '收藏',
+          icon: sticker.favorite ? Icons.star : Icons.star_border,
+          active: sticker.favorite,
+          onTap: () => _toggleStickerFavorite(sticker),
+        ),
+        ActionSheetItem(
+          label: '分享',
+          icon: Icons.share_outlined,
+          onTap: () => _shareSticker(sticker),
+        ),
+        ActionSheetItem(
+          label: '多选',
+          icon: Icons.checklist,
+          onTap: () => _enterSelection(sticker.id),
+        ),
+        ActionSheetItem(
+          label: '删除',
+          icon: Icons.delete_outline,
+          destructive: true,
+          onTap: () => _deleteSingleSticker(sticker),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _toggleStickerPin(Sticker sticker) async {
+    final bool? result = await ref
+        .read(libraryActionsProvider)
+        .toggleStickerPin(sticker.id);
+    if (!mounted) return;
+    if (result == null) {
+      showToast(context, '已达置顶上限，请先取消其他置顶', isError: true);
+    } else {
+      showToast(context, result ? '已置顶' : '已取消置顶');
+    }
+  }
+
+  Future<void> _toggleStickerFavorite(Sticker sticker) async {
+    final bool result = await ref
+        .read(libraryActionsProvider)
+        .toggleStickerFavorite(sticker.id);
+    if (!mounted) return;
+    showToast(context, result ? '已收藏' : '已取消收藏');
+  }
+
+  /// Share the sticker's image through the platform share sheet.
+  /// 通过系统分享面板分享表情包图片。
+  Future<void> _shareSticker(Sticker sticker) async {
+    final String absolute = PathUtils.absoluteSync(sticker.relativePath);
+    final File file = File(absolute);
+    if (!await file.exists()) {
+      if (mounted) {
+        showToast(context, '图片文件已丢失，无法分享', isError: true);
+      }
+      return;
+    }
+    try {
+      await Share.shareXFiles(
+        <XFile>[XFile(absolute)],
+        text: sticker.name.isNotEmpty ? sticker.name : null,
+      );
+    } catch (e) {
+      if (mounted) showToast(context, '分享失败：$e', isError: true);
+    }
+  }
+
+  Future<void> _deleteSingleSticker(Sticker sticker) async {
+    final bool ok = await confirm(
+      context,
+      title: '删除表情包',
+      message: '「${sticker.name.isEmpty ? "这张表情包" : sticker.name}」'
+          '将被移入回收站。',
+      confirmLabel: '删除',
+      destructive: true,
+    );
+    if (!ok) return;
+    await ref.read(libraryActionsProvider).deleteSticker(sticker);
+    if (mounted) showToast(context, '已移入回收站');
   }
 
   /// Edit the names of the selected stickers in one bottom sheet: each gets its
