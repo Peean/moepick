@@ -41,6 +41,8 @@ class SeriesEditPage extends ConsumerStatefulWidget {
 class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _authorController = TextEditingController();
+  final TextEditingController _sourceController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
 
   List<String> _categoryIds = <String>[];
@@ -52,6 +54,8 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
+    _authorController.dispose();
+    _sourceController.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -115,6 +119,26 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
             maxLines: 2,
             minLines: 1,
           ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _authorController,
+            decoration: const InputDecoration(
+              labelText: '作者（可选）',
+              hintText: '画师、创作者或出处署名',
+            ),
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _sourceController,
+            decoration: const InputDecoration(
+              labelText: '来源（可选）',
+              hintText: '链接或出处，例如 https://…',
+            ),
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            textInputAction: TextInputAction.next,
+          ),
 
           const SectionHeader(
             '分类',
@@ -143,7 +167,7 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
           TextField(
             controller: _noteController,
             decoration: const InputDecoration(
-              hintText: '记录来源、使用场景等',
+              hintText: '记录使用场景、注意事项等',
             ),
             maxLines: 4,
             minLines: 3,
@@ -178,6 +202,8 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
     if (series == null) return;
     _nameController.text = series.name;
     _descriptionController.text = series.description;
+    _authorController.text = series.author;
+    _sourceController.text = series.source;
     _noteController.text = series.note;
     _categoryIds = List<String>.from(series.categoryIds);
     _tagIds = List<String>.from(series.tagIds);
@@ -223,6 +249,8 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
           await actions.updateSeries(
             created,
             description: _descriptionController.text.trim(),
+            author: _authorController.text.trim(),
+            source: _sourceController.text.trim(),
             categoryIds: _categoryIds,
             tagIds: _tagIds,
             note: _noteController.text.trim(),
@@ -241,6 +269,8 @@ class _SeriesEditPageState extends ConsumerState<SeriesEditPage> {
           series,
           name: name,
           description: _descriptionController.text.trim(),
+          author: _authorController.text.trim(),
+          source: _sourceController.text.trim(),
           categoryIds: _categoryIds,
           tagIds: _tagIds,
           note: _noteController.text.trim(),

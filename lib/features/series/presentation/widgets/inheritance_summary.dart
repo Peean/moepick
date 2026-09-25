@@ -1,9 +1,22 @@
+// ignore_for_file: use_build_context_synchronously
+//
+// `contextIsAlive` in shared/widgets/common.dart is the Flutter 3.0
+// stand-in for `BuildContext.mounted` (added in 3.4). The analyzer cannot
+// follow the indirection, so this file opts out of the lint for that one
+// guarded use.
+//
+// `contextIsAlive`（见 shared/widgets/common.dart）是 `BuildContext.mounted`
+// （3.4 引入）在 Flutter 3.0 下的等价替代。分析器无法跟随这层间接，
+// 因此本文件对该守卫用法选择关闭该 lint。
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../data/models/category.dart';
 import '../../../../data/models/series.dart';
 import '../../../../data/models/sticker.dart';
 import '../../../../data/models/tag.dart';
+import '../../../../shared/widgets/common.dart';
 import '../../../../shared/widgets/moe_scaffold.dart';
 
 /// Renders a series' own category / tag / note in an expandable card.
@@ -34,6 +47,13 @@ class InheritanceSummary extends StatefulWidget {
 class _InheritanceSummaryState extends State<InheritanceSummary> {
   bool _expanded = false;
 
+  Future<void> _copySource(String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (contextIsAlive(context)) {
+      showToast(context, '来源已复制');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
@@ -42,7 +62,9 @@ class _InheritanceSummaryState extends State<InheritanceSummary> {
     final bool hasAnyMeta = series.categoryIds.isNotEmpty ||
         series.tagIds.isNotEmpty ||
         series.note.isNotEmpty ||
-        series.description.isNotEmpty;
+        series.description.isNotEmpty ||
+        series.author.isNotEmpty ||
+        series.source.isNotEmpty;
 
     return MoeCard(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -107,6 +129,19 @@ class _InheritanceSummaryState extends State<InheritanceSummary> {
                   icon: Icons.local_offer_outlined,
                 );
               }),
+              if (_expanded && series.author.isNotEmpty)
+                _InfoRow(
+                  icon: Icons.person_outline,
+                  label: '作者',
+                  value: series.author,
+                ),
+              if (_expanded && series.source.isNotEmpty)
+                _InfoRow(
+                  icon: Icons.link,
+                  label: '来源',
+                  value: series.source,
+                  onTap: () => _copySource(series.source),
+                ),
               if (_expanded && series.note.isNotEmpty)
                 SizedBox(
                   width: double.infinity,
@@ -144,6 +179,71 @@ class _InheritanceSummaryState extends State<InheritanceSummary> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// A full-width "label: value" line used for author / source in the expanded
+/// state. Tapping a source with a callback copies it to the clipboard.
+/// 展开状态下用于作者 / 来源的全宽「标签：值」信息行。
+/// 带回调的来源点击后复制到剪贴板。
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return SizedBox(
+      width: double.infinity,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(icon, size: 15, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Text(
+              '$label：',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            Expanded(
+              child: onTap != null
+                  ? InkWell(
+                      onTap: onTap,
+                      child: Text(
+                        value,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          height: 1.4,
+                          color: theme.colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                          decorationColor:
+                              theme.colorScheme.primary.withOpacity(0.4),
+                        ),
+                      ),
+                    )
+                  : Text(
+                      value,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.4,
+                        color: theme.colorScheme.onSurface.withOpacity(0.8),
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -16,6 +16,8 @@ class Series {
     required this.id,
     required this.name,
     this.description = '',
+    this.author = '',
+    this.source = '',
     this.coverImagePath,
     List<String>? categoryIds,
     List<String>? tagIds,
@@ -33,6 +35,14 @@ class Series {
 
   final String name;
   final String description;
+
+  /// Creator / artist credit.
+  /// 作者 / 画师署名。
+  final String author;
+
+  /// Origin of the artwork: free text or a URL.
+  /// 作品来源：自由文本或 URL。
+  final String source;
 
   /// Stored *relative* path to the cover image, or null for a generated cover.
   /// 封面图的**相对**路径；为 null 时使用生成的封面。
@@ -74,6 +84,8 @@ class Series {
   Series copyWith({
     String? name,
     String? description,
+    String? author,
+    String? source,
     Object? coverImagePath = _unset,
     List<String>? categoryIds,
     List<String>? tagIds,
@@ -86,6 +98,8 @@ class Series {
       id: id,
       name: name ?? this.name,
       description: description ?? this.description,
+      author: author ?? this.author,
+      source: source ?? this.source,
       coverImagePath: identical(coverImagePath, _unset)
           ? this.coverImagePath
           : coverImagePath as String?,
@@ -107,6 +121,8 @@ class Series {
         'id': id,
         'name': name,
         'description': description,
+        'author': author,
+        'source': source,
         'coverImagePath': coverImagePath,
         'categoryIds': categoryIds,
         'tagIds': tagIds,
@@ -123,6 +139,8 @@ class Series {
       id: (json['id'] as String?) ?? '',
       name: (json['name'] as String?) ?? '',
       description: (json['description'] as String?) ?? '',
+      author: (json['author'] as String?) ?? '',
+      source: (json['source'] as String?) ?? '',
       coverImagePath: json['coverImagePath'] as String?,
       categoryIds: _stringList(json['categoryIds']),
       tagIds: _stringList(json['tagIds']),
@@ -178,13 +196,17 @@ class SeriesAdapter extends TypeAdapter<Series> {
       // Field 10 arrived later; older records have no entry, so default false.
       // 字段 10 是后加的，旧记录没有该项，因此默认 false。
       isDeleted: (fields[10] as bool?) ?? false,
+      // Fields 11 / 12 are the newest additions (author, source).
+      // 字段 11 / 12 是最新追加的（作者、来源）。
+      author: (fields[11] as String?) ?? '',
+      source: (fields[12] as String?) ?? '',
     );
   }
 
   @override
   void write(BinaryWriter writer, Series obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -206,7 +228,11 @@ class SeriesAdapter extends TypeAdapter<Series> {
       ..writeByte(9)
       ..write(DateUtils.toEpochMs(obj.updatedAt))
       ..writeByte(10)
-      ..write(obj.isDeleted);
+      ..write(obj.isDeleted)
+      ..writeByte(11)
+      ..write(obj.author)
+      ..writeByte(12)
+      ..write(obj.source);
   }
 
   static List<String> _readStringList(Object? raw) {

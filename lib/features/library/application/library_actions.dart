@@ -47,6 +47,8 @@ class LibraryActions {
     Series series, {
     String? name,
     String? description,
+    String? author,
+    String? source,
     List<String>? categoryIds,
     List<String>? tagIds,
     String? note,
@@ -55,6 +57,8 @@ class LibraryActions {
           series.copyWith(
             name: name,
             description: description,
+            author: author,
+            source: source,
             categoryIds: categoryIds,
             tagIds: tagIds,
             note: note,
