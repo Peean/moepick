@@ -185,6 +185,32 @@ class LibraryActions {
     _bump();
   }
 
+  /// Rename several stickers at once (multi-select flow).
+  /// 一次重命名多个表情包（多选流程）。
+  ///
+  /// [namesById] maps stickerId -> new name. Entries whose name is unchanged
+  /// are skipped, and the data version is bumped only if anything actually
+  /// changed.
+  ///
+  /// [namesById] 是 stickerId -> 新名称的映射。名称未变化的条目被跳过，
+  /// 仅当确实有变化时才自增数据版本。
+  Future<void> renameStickers(Map<String, String> namesById) async {
+    if (namesById.isEmpty) return;
+    final StickerRepository repo = _ref.read(stickerRepositoryProvider);
+    bool changed = false;
+
+    for (final MapEntry<String, String> entry in namesById.entries) {
+      final Sticker? sticker = repo.getById(entry.key);
+      if (sticker == null) continue;
+      final String next = entry.value.trim();
+      if (next == sticker.name) continue;
+      await repo.save(sticker.copyWith(name: next));
+      changed = true;
+    }
+
+    if (changed) _bump();
+  }
+
   /// Soft-delete a sticker and refresh the parent series' count.
   /// 软删除表情包并刷新其所属系列的计数。
   Future<void> deleteSticker(Sticker sticker) async {

@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/platform/image_picker_service.dart';
+import '../../../core/utils/path_utils.dart';
 import '../../../data/models/app_settings.dart';
 import '../../../data/models/category.dart';
 import '../../../data/models/series.dart';
@@ -137,6 +140,13 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
                   },
                 ),
                 IconButton(
+                  tooltip: '编辑所选名称',
+                  icon: const Icon(Icons.drive_file_rename_outline),
+                  onPressed: _selected.isEmpty
+                      ? null
+                      : () => _editSelectedNames(stickers),
+                ),
+                IconButton(
                   tooltip: '删除所选',
                   icon: const Icon(Icons.delete_outline),
                   onPressed: _selected.isEmpty
@@ -223,7 +233,7 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
                     ),
                     const Spacer(),
                     Text(
-                      _selectionMode ? '点按选择或取消，选完点右上角删除' : '点按查看详情，长按进入多选',
+                      _selectionMode ? '点按选择或取消，右上角可改名或删除' : '点按查看详情，长按进入多选',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context)
                                 .colorScheme
@@ -323,6 +333,32 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
     }
   }
 
+  /// Edit the names of the selected stickers in one bottom sheet: each gets its
+  /// own field, pre-filled with the current name, and a single save applies all
+  /// the changes.
+  /// 在一个底部面板中逐个编辑所选表情包的名称：每个表情包一个输入框，
+  /// 预填当前名称，点一次保存统一应用所有改动。
+  Future<void> _editSelectedNames(List<Sticker> stickers) async {
+    final List<Sticker> chosen = stickers
+        .where((Sticker s) => _selected.contains(s.id))
+        .toList();
+
+    final Map<String, String>? result =
+        await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext context) => _BatchRenameSheet(stickers: chosen),
+    );
+
+    if (result == null || result.isEmpty || !mounted) return;
+
+    await ref.read(libraryActionsProvider).renameStickers(result);
+    if (mounted) {
+      _exitSelection();
+      showToast(context, '已更新 ${result.length} 个名称');
+    }
+  }
+
   Future<void> _deleteSeries(Series series) async {
     final bool ok = await confirm(
       context,
@@ -402,6 +438,162 @@ class _StickerGrid extends ConsumerWidget {
           );
         },
         childCount: stickers.length,
+      ),
+    );
+  }
+}
+
+/// Bottom sheet that lets the user edit the name of every selected sticker at
+/// once — one field per sticker, pre-filled, saved in a single tap.
+/// 底部面板：一次编辑所有选中表情包的名称——每个表情包一个输入框，
+/// 预填当前名称，点一次保存统一应用。
+class _BatchRenameSheet extends StatefulWidget {
+  const _BatchRenameSheet({required this.stickers});
+
+  final List<Sticker> stickers;
+
+  @override
+  State<_BatchRenameSheet> createState() => _BatchRenameSheetState();
+}
+
+class _BatchRenameSheetState extends State<_BatchRenameSheet> {
+  late final List<TextEditingController> _controllers =
+      widget.stickers
+          .map((Sticker s) => TextEditingController(text: s.name))
+          .toList();
+
+  @override
+  void dispose() {
+    for (final TextEditingController c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _save() {
+    final Map<String, String> result = <String, String>{};
+    for (int i = 0; i < widget.stickers.length; i++) {
+      final String name = _controllers[i].text.trim();
+      if (name != widget.stickers[i].name) {
+        result[widget.stickers[i].id] = name;
+      }
+    }
+    Navigator.of(context).pop(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return Padding(
+      // Lift the sheet above the keyboard so fields near the bottom stay
+      // visible while typing.
+      // 把面板抬到键盘上方，使底部输入框在输入时仍可见。
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      '编辑名称（${widget.stickers.length} 个）',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '关闭',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.stickers.length,
+                itemBuilder: (BuildContext context, int index) {
+                  final Sticker sticker = widget.stickers[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 5,
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Image.file(
+                              File(
+                                PathUtils.absoluteSync(
+                                  sticker.thumbPath ?? sticker.relativePath,
+                                ),
+                              ),
+                              fit: BoxFit.cover,
+                              cacheWidth: 96,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: theme.colorScheme.onSurface
+                                    .withOpacity(0.06),
+                                child: Icon(
+                                  Icons.image_outlined,
+                                  size: 20,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.3),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _controllers[index],
+                            decoration: const InputDecoration(
+                              hintText: '留空则跟随系列名',
+                              isDense: true,
+                            ),
+                            textInputAction: TextInputAction.next,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('取消'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _save,
+                      child: const Text('保存'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
