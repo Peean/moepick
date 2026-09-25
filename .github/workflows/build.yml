@@ -58,11 +58,12 @@ jobs:
           channel: stable
           cache: true
 
-      # Linux 桌面构建需要 GTK3 开发库与 ninja。
+      # Linux 桌面构建需要 GTK3 开发库、ninja，以及 flutter_secure_storage
+      # 依赖的 libsecret。
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgtk-3-dev
+          sudo apt-get install -y ninja-build libgtk-3-dev libsecret-1-dev
 
       - name: 安装依赖
         run: flutter pub get
@@ -83,18 +84,21 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      # Flutter 3.0.0 的 VS 检测只认 Visual Studio 2019，而 windows-2022 runner
+      # 只装 VS 2022，会报「Visual Studio 16 2019 could not find any instance」。
+      # 改用 3.7.17（Dart 2.19，仍满足 pubspec 的 <3.0.0 约束），其对 VS 2022
+      # 的支持已成熟。仅 Windows job 用此版本，Android/Linux 保持 3.0.0。
       - name: 安装 Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.0.0'
+          flutter-version: '3.7.17'
           channel: stable
           cache: true
 
       - name: 安装依赖
         run: flutter pub get
 
-      # windows-latest runner 预装 Visual Studio 2022 + C++ 桌面工作负载，
-      # 可直接构建 Windows 桌面端。
+      # windows-2022 runner 预装 Visual Studio 2022 + C++ 桌面工作负载。
       - name: 构建 Windows 桌面
         run: flutter build windows --release
 
