@@ -68,6 +68,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     AppLog.configure(enabled: state.logEnabled, level: value);
   }
 
+  /// Set the maximum number of pinnable items.
+  /// 设置可置顶的条目数量上限。
+  Future<void> setPinLimit(int value) =>
+      _update(state.copyWith(pinLimit: value.clamp(1, 50)));
+
   /// Probe hook: reassign state without touching disk, so tests can tell the
   /// rebuild path apart from the I/O path.
   /// 探针钩子：只重设 state 不写盘，使测试能区分重建路径与 I/O 路径。

@@ -156,6 +156,28 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
               ]
             : <Widget>[
                 IconButton(
+                  tooltip: series.pinned ? '取消置顶' : '置顶',
+                  icon: Icon(
+                    series.pinned
+                        ? Icons.push_pin
+                        : Icons.push_pin_outlined,
+                    color: series.pinned
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  onPressed: () => _togglePin(series),
+                ),
+                IconButton(
+                  tooltip: series.favorite ? '取消收藏' : '收藏',
+                  icon: Icon(
+                    series.favorite ? Icons.star : Icons.star_border,
+                    color: series.favorite
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  onPressed: () => _toggleFavorite(series),
+                ),
+                IconButton(
                   tooltip: '编辑系列信息',
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: () =>
@@ -357,6 +379,25 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
       _exitSelection();
       showToast(context, '已更新 ${result.length} 个名称');
     }
+  }
+
+  Future<void> _togglePin(Series series) async {
+    final bool? result =
+        await ref.read(libraryActionsProvider).toggleSeriesPin(series.id);
+    if (!mounted) return;
+    if (result == null) {
+      showToast(context, '已达置顶上限，请先取消其他置顶', isError: true);
+    } else {
+      showToast(context, result ? '已置顶' : '已取消置顶');
+    }
+  }
+
+  Future<void> _toggleFavorite(Series series) async {
+    final bool result = await ref
+        .read(libraryActionsProvider)
+        .toggleSeriesFavorite(series.id);
+    if (!mounted) return;
+    showToast(context, result ? '已收藏' : '已取消收藏');
   }
 
   Future<void> _deleteSeries(Series series) async {

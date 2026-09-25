@@ -25,9 +25,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../data/models/series.dart';
+import '../../../data/models/sticker.dart';
 import '../../../routes/route_paths.dart';
 import '../../../shared/widgets/common.dart';
 import '../../../shared/widgets/moe_scaffold.dart';
+import '../../../shared/widgets/sticker_tile.dart';
 import '../../library/application/library_actions.dart';
 import '../../library/application/library_providers.dart';
 import 'widgets/series_card.dart';
@@ -49,13 +51,24 @@ class LibraryPage extends ConsumerStatefulWidget {
   ConsumerState<LibraryPage> createState() => _LibraryPageState();
 }
 
-class _LibraryPageState extends ConsumerState<LibraryPage> {
+class _LibraryPageState extends ConsumerState<LibraryPage>
+    with SingleTickerProviderStateMixin {
   DateTime? _lastBackPressed;
+
+  /// Tabs: gallery and favourites.
+  /// 标签页：图库与收藏。
+  late final TabController _tabs = TabController(length: 2, vsync: this);
 
   /// Multi-select mode, entered by long-pressing a series card.
   /// 多选模式，由长按系列卡片进入。
   bool _selectionMode = false;
   final Set<String> _selected = <String>{};
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
 
   void _enterSelection(String seriesId) {
     setState(() {
@@ -146,6 +159,18 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     onPressed: () => context.go(RoutePaths.settings),
                   ),
                 ],
+          // Tab bar is hidden during multi-select so the selection actions are
+          // the only thing on screen.
+          // 多选期间隐藏标签栏，使选择操作成为界面唯一焦点。
+          bottom: _selectionMode
+              ? null
+              : TabBar(
+                  controller: _tabs,
+                  tabs: const <Widget>[
+                    Tab(text: '图库'),
+                    Tab(text: '收藏'),
+                  ],
+                ),
         ),
         floatingActionButton: _selectionMode
             ? null
@@ -154,78 +179,92 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 icon: const Icon(Icons.add),
                 label: const Text('新建系列'),
               ),
-        body: seriesList.isEmpty
-            ? EmptyState(
-                icon: Icons.collections_outlined,
-                title: '还没有系列',
-                message: '创建一个系列来收纳你的表情包。\n'
-                    '系列可以有自己的分类、标签和备注，'
-                    '其中的表情包会自动继承。',
-                action: ElevatedButton.icon(
-                  onPressed: () => _createSeries(context, ref),
-                  icon: const Icon(Icons.add),
-                  label: const Text('新建系列'),
-                ),
-              )
-            : CustomScrollView(
-                slivers: <Widget>[
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text(
-                        _selectionMode
-                            ? '点按选择或取消，长按进入多选'
-                            : '${seriesList.length} 个系列 · $stickerCount 个表情包',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withOpacity(0.6),
-                            ),
-                      ),
-                    ),
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                    sliver: SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 220,
-                        mainAxisSpacing: 14,
-                        crossAxisSpacing: 14,
-                        childAspectRatio: 0.82,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (BuildContext context, int index) {
-                          final Series series = seriesList[index];
-                          return SeriesCard(
-                            series: series,
-                            selected: _selectionMode &&
-                                _selected.contains(series.id),
-                            onTap: () {
-                              if (_selectionMode) {
-                                _toggle(series.id);
-                              } else {
-                                context.push(RoutePaths.seriesOf(series.id));
-                              }
-                            },
-                            onLongPress: () {
-                              if (_selectionMode) {
-                                _toggle(series.id);
-                              } else {
-                                _enterSelection(series.id);
-                              }
-                            },
-                          );
-                        },
-                        childCount: seriesList.length,
-                      ),
-                    ),
-                  ),
+        body: _selectionMode
+            ? _buildGallery(seriesList, stickerCount)
+            : TabBarView(
+                controller: _tabs,
+                children: <Widget>[
+                  _buildGallery(seriesList, stickerCount),
+                  const _FavoritesTab(),
                 ],
               ),
       ),
     );
+  }
+
+  /// The gallery tab: the series grid (or its empty state).
+  /// 图库标签页：系列网格（或其空状态）。
+  Widget _buildGallery(List<Series> seriesList, int stickerCount) {
+    return seriesList.isEmpty
+        ? EmptyState(
+            icon: Icons.collections_outlined,
+            title: '还没有系列',
+            message: '创建一个系列来收纳你的表情包。\n'
+                '系列可以有自己的分类、标签和备注，'
+                '其中的表情包会自动继承。',
+            action: ElevatedButton.icon(
+              onPressed: () => _createSeries(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('新建系列'),
+            ),
+          )
+        : CustomScrollView(
+            slivers: <Widget>[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Text(
+                    _selectionMode
+                        ? '点按选择或取消，长按进入多选'
+                        : '${seriesList.length} 个系列 · $stickerCount 个表情包',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.6),
+                        ),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                sliver: SliverGrid(
+                  gridDelegate:
+                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 220,
+                    mainAxisSpacing: 14,
+                    crossAxisSpacing: 14,
+                    childAspectRatio: 0.82,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (BuildContext context, int index) {
+                      final Series series = seriesList[index];
+                      return SeriesCard(
+                        series: series,
+                        selected:
+                            _selectionMode && _selected.contains(series.id),
+                        onTap: () {
+                          if (_selectionMode) {
+                            _toggle(series.id);
+                          } else {
+                            context.push(RoutePaths.seriesOf(series.id));
+                          }
+                        },
+                        onLongPress: () {
+                          if (_selectionMode) {
+                            _toggle(series.id);
+                          } else {
+                            _enterSelection(series.id);
+                          }
+                        },
+                      );
+                    },
+                    childCount: seriesList.length,
+                  ),
+                ),
+              ),
+            ],
+          );
   }
 
   Future<void> _deleteSelected() async {
@@ -335,3 +374,73 @@ Future<String?> promptForName(
   String hint = '',
 }) =>
     _promptForName(context, title: title, initial: initial, hint: hint);
+
+/// Favourites tab: pinned series and stickers marked as favourite.
+/// 收藏标签页：收藏的系列与表情包。
+class _FavoritesTab extends ConsumerWidget {
+  const _FavoritesTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final List<Series> series = ref.watch(favoriteSeriesProvider);
+    final List<Sticker> stickers = ref.watch(favoriteStickersProvider);
+
+    if (series.isEmpty && stickers.isEmpty) {
+      return const EmptyState(
+        icon: Icons.star_border,
+        title: '还没有收藏',
+        message: '在系列或表情包详情页点星标收藏，\n就会出现在这里。',
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+      children: <Widget>[
+        if (series.isNotEmpty) ...<Widget>[
+          SectionHeader('收藏的系列', subtitle: '${series.length} 个'),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 220,
+              mainAxisSpacing: 14,
+              crossAxisSpacing: 14,
+              childAspectRatio: 0.82,
+            ),
+            itemCount: series.length,
+            itemBuilder: (BuildContext context, int index) {
+              final Series s = series[index];
+              return SeriesCard(
+                series: s,
+                onTap: () => context.push(RoutePaths.seriesOf(s.id)),
+              );
+            },
+          ),
+        ],
+        if (stickers.isNotEmpty) ...<Widget>[
+          SectionHeader('收藏的表情包', subtitle: '${stickers.length} 个'),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 120,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 0.82,
+            ),
+            itemCount: stickers.length,
+            itemBuilder: (BuildContext context, int index) {
+              final Sticker sticker = stickers[index];
+              return StickerTile(
+                sticker: sticker,
+                showName: true,
+                onTap: () =>
+                    context.push(RoutePaths.stickerOf(sticker.id)),
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}

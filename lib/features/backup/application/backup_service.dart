@@ -493,10 +493,12 @@ class BackupService {
   String contentFingerprint() {
     final List<String> parts = <String>[];
     for (final Series s in _store.series.values) {
-      parts.add('s:${s.id}:${DateUtils.toEpochMs(s.updatedAt)}:${s.isDeleted}');
+      parts.add('s:${s.id}:${DateUtils.toEpochMs(s.updatedAt)}:${s.isDeleted}:'
+          '${s.pinned}:${s.favorite}');
     }
     for (final Sticker s in _store.stickers.values) {
-      parts.add('k:${s.id}:${DateUtils.toEpochMs(s.updatedAt)}:${s.isDeleted}');
+      parts.add('k:${s.id}:${DateUtils.toEpochMs(s.updatedAt)}:${s.isDeleted}:'
+          '${s.pinned}:${s.favorite}');
     }
     for (final Category c in _store.categories.values) {
       parts.add('c:${c.id}:${DateUtils.toEpochMs(c.updatedAt)}:${c.isDeleted}');

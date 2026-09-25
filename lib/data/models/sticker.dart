@@ -20,6 +20,8 @@ class Sticker {
     List<String>? tagIds,
     this.note = '',
     this.sortIndex = 0,
+    this.pinned = false,
+    this.favorite = false,
     required this.createdAt,
     required this.updatedAt,
     this.isDeleted = false,
@@ -67,6 +69,14 @@ class Sticker {
   /// 系列内的排序序号。
   final int sortIndex;
 
+  /// Whether this sticker is pinned to the top of its series.
+  /// 该表情包是否置顶到其系列最前。
+  final bool pinned;
+
+  /// Whether this sticker is marked as a favourite.
+  /// 该表情包是否被收藏。
+  final bool favorite;
+
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool isDeleted;
@@ -99,6 +109,8 @@ class Sticker {
     List<String>? tagIds,
     String? note,
     int? sortIndex,
+    bool? pinned,
+    bool? favorite,
     DateTime? updatedAt,
     bool? isDeleted,
   }) {
@@ -117,6 +129,8 @@ class Sticker {
       tagIds: tagIds ?? List<String>.from(this.tagIds),
       note: note ?? this.note,
       sortIndex: sortIndex ?? this.sortIndex,
+      pinned: pinned ?? this.pinned,
+      favorite: favorite ?? this.favorite,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -139,6 +153,8 @@ class Sticker {
         'tagIds': tagIds,
         'note': note,
         'sortIndex': sortIndex,
+        'pinned': pinned,
+        'favorite': favorite,
         'createdAt': DateUtils.toIso(createdAt),
         'updatedAt': DateUtils.toIso(updatedAt),
         'isDeleted': isDeleted,
@@ -160,6 +176,8 @@ class Sticker {
       tagIds: _stringList(json['tagIds']),
       note: (json['note'] as String?) ?? '',
       sortIndex: (json['sortIndex'] as num?)?.toInt() ?? 0,
+      pinned: (json['pinned'] as bool?) ?? false,
+      favorite: (json['favorite'] as bool?) ?? false,
       createdAt: DateUtils.parseOr(json['createdAt'], fallback),
       updatedAt: DateUtils.parseOr(json['updatedAt'], fallback),
       isDeleted: (json['isDeleted'] as bool?) ?? false,
@@ -206,13 +224,17 @@ class StickerAdapter extends TypeAdapter<Sticker> {
       createdAt: _readDate(fields[13], fallback),
       updatedAt: _readDate(fields[14], fallback),
       isDeleted: (fields[15] as bool?) ?? false,
+      // Fields 16 / 17: pinning and favourite flags.
+      // 字段 16 / 17：置顶与收藏标记。
+      pinned: (fields[16] as bool?) ?? false,
+      favorite: (fields[17] as bool?) ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, Sticker obj) {
     writer
-      ..writeByte(16)
+      ..writeByte(18)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -244,7 +266,11 @@ class StickerAdapter extends TypeAdapter<Sticker> {
       ..writeByte(14)
       ..write(DateUtils.toEpochMs(obj.updatedAt))
       ..writeByte(15)
-      ..write(obj.isDeleted);
+      ..write(obj.isDeleted)
+      ..writeByte(16)
+      ..write(obj.pinned)
+      ..writeByte(17)
+      ..write(obj.favorite);
   }
 
   static List<String> _readStringList(Object? raw) {

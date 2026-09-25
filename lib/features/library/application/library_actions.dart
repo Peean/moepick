@@ -41,6 +41,79 @@ class LibraryActions {
     return created.id;
   }
 
+  /// Toggle a series' pin. Returns null when the pin limit is reached (the
+  /// series stays unpinned), true when now pinned, false when now unpinned.
+  /// 切换系列置顶。达到上限时返回 null（保持未置顶），
+  /// true 表示现在已置顶，false 表示现在已取消置顶。
+  Future<bool?> toggleSeriesPin(String seriesId) async {
+    final SeriesRepository repo = _ref.read(seriesRepositoryProvider);
+    final Series? series = repo.getById(seriesId);
+    if (series == null) return false;
+
+    if (series.pinned) {
+      await repo.save(series.copyWith(pinned: false));
+      _bump();
+      return false;
+    }
+
+    final int limit = _ref.read(hiveStoreProvider).readSettings().pinLimit;
+    final int pinnedCount = repo.getAll().where((Series s) => s.pinned).length;
+    if (pinnedCount >= limit) return null;
+
+    await repo.save(series.copyWith(pinned: true));
+    _bump();
+    return true;
+  }
+
+  /// Toggle a series' favourite. Returns the new favourite state.
+  /// 切换系列收藏。返回新的收藏状态。
+  Future<bool> toggleSeriesFavorite(String seriesId) async {
+    final SeriesRepository repo = _ref.read(seriesRepositoryProvider);
+    final Series? series = repo.getById(seriesId);
+    if (series == null) return false;
+    final bool next = !series.favorite;
+    await repo.save(series.copyWith(favorite: next));
+    _bump();
+    return next;
+  }
+
+  /// Toggle a sticker's pin. Returns null when the pin limit is reached, true
+  /// when now pinned, false when now unpinned.
+  /// 切换表情包置顶。达到上限时返回 null，true 表示现在已置顶，
+  /// false 表示现在已取消置顶。
+  Future<bool?> toggleStickerPin(String stickerId) async {
+    final StickerRepository repo = _ref.read(stickerRepositoryProvider);
+    final Sticker? sticker = repo.getById(stickerId);
+    if (sticker == null) return false;
+
+    if (sticker.pinned) {
+      await repo.save(sticker.copyWith(pinned: false));
+      _bump();
+      return false;
+    }
+
+    final int limit = _ref.read(hiveStoreProvider).readSettings().pinLimit;
+    final int pinnedCount =
+        repo.getAll().where((Sticker s) => s.pinned).length;
+    if (pinnedCount >= limit) return null;
+
+    await repo.save(sticker.copyWith(pinned: true));
+    _bump();
+    return true;
+  }
+
+  /// Toggle a sticker's favourite. Returns the new favourite state.
+  /// 切换表情包收藏。返回新的收藏状态。
+  Future<bool> toggleStickerFavorite(String stickerId) async {
+    final StickerRepository repo = _ref.read(stickerRepositoryProvider);
+    final Sticker? sticker = repo.getById(stickerId);
+    if (sticker == null) return false;
+    final bool next = !sticker.favorite;
+    await repo.save(sticker.copyWith(favorite: next));
+    _bump();
+    return next;
+  }
+
   /// Update a series' editable fields.
   /// 更新系列的可编辑字段。
   Future<void> updateSeries(

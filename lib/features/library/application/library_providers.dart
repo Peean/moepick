@@ -216,3 +216,30 @@ final Provider<int> trashCountProvider = Provider<int>((Ref ref) {
   return ref.watch(trashSeriesProvider).length +
       ref.watch(trashStickersProvider).length;
 });
+
+// --------------------------------------------------------------------- 收藏
+
+/// Series marked as favourite, pinned first then newest.
+/// 已收藏的系列，置顶在前，其次按创建时间倒序。
+final Provider<List<Series>> favoriteSeriesProvider =
+    Provider<List<Series>>((Ref ref) {
+  ref.watch(dataVersionProvider);
+  final List<Series> list = ref
+      .watch(seriesRepositoryProvider)
+      .getAll()
+      .where((Series s) => s.favorite)
+      .toList();
+  return list;
+});
+
+/// Stickers marked as favourite, grouped visually by the caller.
+/// 已收藏的表情包。
+final Provider<List<Sticker>> favoriteStickersProvider =
+    Provider<List<Sticker>>((Ref ref) {
+  ref.watch(dataVersionProvider);
+  return ref
+      .watch(stickerRepositoryProvider)
+      .getAll()
+      .where((Sticker s) => s.favorite)
+      .toList();
+});

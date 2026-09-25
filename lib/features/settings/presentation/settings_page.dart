@@ -1,3 +1,13 @@
+// ignore_for_file: use_build_context_synchronously
+//
+// `contextIsAlive` (shared/widgets/common.dart) is the Flutter 3.0 stand-in for
+// `BuildContext.mounted`; the analyzer cannot follow the indirection, so this
+// file opts out of the lint for guarded uses (e.g. the pin-limit prompt).
+//
+// `contextIsAlive`（shared/widgets/common.dart）是 `BuildContext.mounted` 在
+// Flutter 3.0 下的等价替代；分析器无法跟随这层间接，因此本文件对守卫用法
+// （如置顶上限输入）关闭该 lint。
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +16,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/app_settings.dart';
 import '../../../routes/route_paths.dart';
+import '../../../shared/widgets/common.dart';
 import '../../../shared/widgets/moe_scaffold.dart';
 import '../../library/application/library_providers.dart';
 import '../application/settings_providers.dart';
@@ -64,6 +75,12 @@ class SettingsPage extends ConsumerWidget {
             title: '分类与标签',
             subtitle: '${stats['categories']} 个分类 · ${stats['tags']} 个标签',
             onTap: () => context.go(RoutePaths.settingsTaxonomy),
+          ),
+          _SettingsTile(
+            icon: Icons.push_pin_outlined,
+            title: '置顶数量上限',
+            subtitle: '最多 ${settings.pinLimit} 个（系列与表情包分别计数）',
+            onTap: () => _editPinLimit(context, ref, settings.pinLimit),
           ),
 
           const SectionHeader('数据'),
@@ -128,6 +145,31 @@ class SettingsPage extends ConsumerWidget {
         ? ' · 模糊 ${config.blurSigma.toStringAsFixed(0)}'
         : '';
     return '$mode · 不透明度 ${(config.opacity * 100).round()}%$blur';
+  }
+
+  /// Prompt for and persist the pin-count limit.
+  /// 询问并持久化置顶数量上限。
+  static Future<void> _editPinLimit(
+    BuildContext context,
+    WidgetRef ref,
+    int current,
+  ) async {
+    final String? input = await promptForText(
+      context,
+      title: '置顶数量上限',
+      hint: '1-50',
+      initial: '$current',
+      confirmLabel: '保存',
+    );
+    if (input == null) return;
+    final int? value = int.tryParse(input.trim());
+    if (value == null || value < 1 || value > 50) {
+      if (contextIsAlive(context)) {
+        showToast(context, '请输入 1-50 之间的数字', isError: true);
+      }
+      return;
+    }
+    await ref.read(appSettingsProvider.notifier).setPinLimit(value);
   }
 }
 

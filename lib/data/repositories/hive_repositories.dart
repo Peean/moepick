@@ -22,7 +22,12 @@ class HiveSeriesRepository implements SeriesRepository {
   List<Series> getAll() {
     final List<Series> list =
         _box.values.where((Series s) => !s.isDeleted).toList();
-    list.sort((Series a, Series b) => b.createdAt.compareTo(a.createdAt));
+    // Pinned series first, then newest first.
+    // 置顶系列在前，其余按创建时间倒序。
+    list.sort((Series a, Series b) {
+      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+      return b.createdAt.compareTo(a.createdAt);
+    });
     return list;
   }
 
@@ -113,7 +118,10 @@ class HiveStickerRepository implements StickerRepository {
     final List<Sticker> list = _box.values
         .where((Sticker s) => !s.isDeleted && s.seriesId == seriesId)
         .toList();
+    // Pinned stickers first, then sortIndex, then creation time.
+    // 置顶表情包在前，其次按序号，再按创建时间。
     list.sort((Sticker a, Sticker b) {
+      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
       final int byIndex = a.sortIndex.compareTo(b.sortIndex);
       // Fall back to creation time so equal sortIndex values stay stable.
       // 回退到创建时间，使 sortIndex 相同时排序稳定。

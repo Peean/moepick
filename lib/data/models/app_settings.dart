@@ -227,6 +227,7 @@ class AppSettings {
     this.compactCards = false,
     this.logEnabled = true,
     this.logLevel = 1,
+    this.pinLimit = 9,
   });
 
   /// Seed colour driving the generated `ColorScheme`, 0xAARRGGBB.
@@ -255,6 +256,10 @@ class AppSettings {
   /// 记录的最低等级：0=debug、1=info、2=warn、3=error。
   final int logLevel;
 
+  /// Maximum number of items (series or stickers) that can be pinned.
+  /// 可置顶的条目（系列或表情包）数量上限。
+  final int pinLimit;
+
   static AppSettings defaults() => AppSettings();
 
   AppSettings copyWith({
@@ -265,6 +270,7 @@ class AppSettings {
     bool? compactCards,
     bool? logEnabled,
     int? logLevel,
+    int? pinLimit,
   }) {
     return AppSettings(
       seedColorValue: seedColorValue ?? this.seedColorValue,
@@ -274,6 +280,7 @@ class AppSettings {
       compactCards: compactCards ?? this.compactCards,
       logEnabled: logEnabled ?? this.logEnabled,
       logLevel: logLevel ?? this.logLevel,
+      pinLimit: pinLimit ?? this.pinLimit,
     );
   }
 
@@ -285,6 +292,7 @@ class AppSettings {
         'compactCards': compactCards,
         'logEnabled': logEnabled,
         'logLevel': logLevel,
+        'pinLimit': pinLimit,
       };
 
   static AppSettings fromJson(Map<String, dynamic> json) {
@@ -296,6 +304,7 @@ class AppSettings {
       compactCards: (json['compactCards'] as bool?) ?? false,
       logEnabled: (json['logEnabled'] as bool?) ?? true,
       logLevel: (json['logLevel'] as num?)?.toInt() ?? 1,
+      pinLimit: (json['pinLimit'] as num?)?.toInt() ?? 9,
     );
   }
 }
@@ -323,13 +332,16 @@ class AppSettingsAdapter extends TypeAdapter<AppSettings> {
       // 字段 5 / 6 为后加，旧记录默认「启用 + info」。
       logEnabled: (fields[5] as bool?) ?? true,
       logLevel: (fields[6] as int?) ?? 1,
+      // Field 7: pin limit, default 9.
+      // 字段 7：置顶上限，默认 9。
+      pinLimit: (fields[7] as int?) ?? 9,
     );
   }
 
   @override
   void write(BinaryWriter writer, AppSettings obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.seedColorValue)
       ..writeByte(1)
@@ -343,7 +355,9 @@ class AppSettingsAdapter extends TypeAdapter<AppSettings> {
       ..writeByte(5)
       ..write(obj.logEnabled)
       ..writeByte(6)
-      ..write(obj.logLevel);
+      ..write(obj.logLevel)
+      ..writeByte(7)
+      ..write(obj.pinLimit);
   }
 }
 

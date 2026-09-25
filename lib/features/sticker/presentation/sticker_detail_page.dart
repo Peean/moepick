@@ -95,6 +95,26 @@ class StickerDetailPage extends ConsumerWidget {
         ),
         actions: <Widget>[
           IconButton(
+            tooltip: sticker.pinned ? '取消置顶' : '置顶',
+            icon: Icon(
+              sticker.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+              color: sticker.pinned
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            onPressed: () => _togglePin(context, ref, sticker),
+          ),
+          IconButton(
+            tooltip: sticker.favorite ? '取消收藏' : '收藏',
+            icon: Icon(
+              sticker.favorite ? Icons.star : Icons.star_border,
+              color: sticker.favorite
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            onPressed: () => _toggleFavorite(context, ref, sticker),
+          ),
+          IconButton(
             tooltip: '分享',
             icon: const Icon(Icons.share_outlined),
             onPressed: () => _share(context, sticker),
@@ -254,6 +274,34 @@ class StickerDetailPage extends ConsumerWidget {
         showToast(context, '分享失败：$e', isError: true);
       }
     }
+  }
+
+  Future<void> _togglePin(
+    BuildContext context,
+    WidgetRef ref,
+    Sticker sticker,
+  ) async {
+    final bool? result = await ref
+        .read(libraryActionsProvider)
+        .toggleStickerPin(sticker.id);
+    if (!contextIsAlive(context)) return;
+    if (result == null) {
+      showToast(context, '已达置顶上限，请先取消其他置顶', isError: true);
+    } else {
+      showToast(context, result ? '已置顶' : '已取消置顶');
+    }
+  }
+
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    WidgetRef ref,
+    Sticker sticker,
+  ) async {
+    final bool result = await ref
+        .read(libraryActionsProvider)
+        .toggleStickerFavorite(sticker.id);
+    if (!contextIsAlive(context)) return;
+    showToast(context, result ? '已收藏' : '已取消收藏');
   }
 
   Future<void> _delete(
