@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:path/path.dart' as p;
 
 import '../../../core/constants/app_constants.dart';
@@ -138,14 +139,48 @@ class BackupService {
 
   /// Build an archive and return its bytes.
   /// 构建归档并返回其字节。
+  ///
+  /// The expensive part — reading every image and ZIP-encoding the archive —
+  /// runs in an isolate, so neither a backup export nor a WebDAV sync blocks
+  /// the UI thread. Images are stored uncompressed (they are already JPEG/PNG),
+  /// which is the single biggest win: re-compressing them was pure CPU waste
+  /// that made a 20 MB sync take half a minute.
+  ///
+  /// 昂贵的部分——读取每张图片并做 ZIP 编码——在 isolate 中执行，因此备份导出与
+  /// WebDAV 同步都不会阻塞 UI 线程。图片以无压缩方式存储（它们本就是 JPEG/PNG），
+  /// 这是最大的提速点：对它们再压缩纯属浪费 CPU，是 20MB 同步耗时半分钟的元凶。
   Future<Uint8List> buildArchive({required BackupScope scope}) async {
-    final Archive archive = Archive();
+    final Map<String, dynamic> manifest = _buildManifest();
+    manifest['scope'] = scope.name;
 
-    final Map<String, dynamic> manifest = <String, dynamic>{
+    final List<ArchiveAsset> assets = <ArchiveAsset>[];
+    if (scope == BackupScope.full) {
+      for (final String relative in _collectAssetPaths()) {
+        assets.add(
+          ArchiveAsset(
+            name: '$assetsPrefix${_toArchivePath(relative)}',
+            path: await PathUtils.absolute(relative),
+          ),
+        );
+      }
+      manifest['assetCount'] = assets.length;
+    }
+
+    final String manifestJson = jsonEncode(manifest);
+    return compute(
+      _encodeBackupArchive,
+      _ArchiveBuildRequest(manifestJson: manifestJson, assets: assets),
+    );
+  }
+
+  /// Assemble the manifest map, minus the asset count which is filled in by the
+  /// caller once the asset list is known.
+  /// 组装 manifest 映射（不含资源数，由调用方在确定资源列表后补齐）。
+  Map<String, dynamic> _buildManifest() {
+    return <String, dynamic>{
       'schemaVersion': AppConstants.backupSchemaVersion,
       'appId': AppConstants.appId,
       'createdAt': DateUtils.toIso(DateUtils.nowUtc()),
-      'scope': scope.name,
       'boxes': <String, dynamic>{
         HiveBoxes.series: _seriesJson(),
         HiveBoxes.stickers: _stickersJson(),
@@ -161,38 +196,6 @@ class BackupService {
         'tags': _store.tags.length,
       },
     };
-
-    if (scope == BackupScope.full) {
-      final List<String> assets = _collectAssetPaths();
-      manifest['assetCount'] = assets.length;
-
-      for (final String relative in assets) {
-        final File file = File(await PathUtils.absolute(relative));
-        if (!await file.exists()) continue;
-        final Uint8List bytes = await file.readAsBytes();
-        archive.addFile(
-          ArchiveFile(
-            '$assetsPrefix${_toArchivePath(relative)}',
-            bytes.length,
-            bytes,
-          ),
-        );
-      }
-    }
-
-    // The manifest goes in last so it can report an accurate asset count.
-    // manifest 最后写入，以便报告准确的资源数量。
-    final Uint8List manifestBytes =
-        Uint8List.fromList(utf8.encode(jsonEncode(manifest)));
-    archive.addFile(
-      ArchiveFile(manifestEntry, manifestBytes.length, manifestBytes),
-    );
-
-    final List<int>? encoded = ZipEncoder().encode(archive);
-    if (encoded == null) {
-      throw BackupException('打包失败');
-    }
-    return Uint8List.fromList(encoded);
   }
 
   /// Write a backup file to a destination the user approved.
@@ -505,4 +508,61 @@ class BackupService {
     parts.sort();
     return HashUtils.ofString(parts.join('|'));
   }
+}
+
+/// One asset file to embed in the archive.
+/// 归档中要嵌入的单个资源文件。
+///
+/// Carries the archive entry name and the absolute path so the isolate worker
+/// needs no knowledge of the app's path layout.
+/// 携带归档条目名与绝对路径，使 isolate 工作函数无需了解应用的路径布局。
+class ArchiveAsset {
+  const ArchiveAsset({required this.name, required this.path});
+
+  final String name;
+  final String path;
+}
+
+/// Arguments for [_encodeBackupArchive], sent across the isolate boundary.
+/// [_encodeBackupArchive] 的参数，需跨 isolate 传递。
+class _ArchiveBuildRequest {
+  const _ArchiveBuildRequest({
+    required this.manifestJson,
+    required this.assets,
+  });
+
+  final String manifestJson;
+  final List<ArchiveAsset> assets;
+}
+
+/// Top-level isolate worker: read the asset files, assemble and ZIP-encode the
+/// archive. Images are stored uncompressed (already JPEG/PNG), the manifest is
+/// deflated.
+/// 顶层 isolate 工作函数：读取资源文件、组装并 ZIP 编码归档。
+/// 图片无压缩存储（本就是 JPEG/PNG），manifest 采用 deflate。
+Uint8List _encodeBackupArchive(_ArchiveBuildRequest request) {
+  final Archive archive = Archive();
+
+  for (final ArchiveAsset asset in request.assets) {
+    final File file = File(asset.path);
+    if (!file.existsSync()) continue;
+    final Uint8List bytes = file.readAsBytesSync();
+    final ArchiveFile entry = ArchiveFile(asset.name, bytes.length, bytes);
+    // Re-compressing already-compressed image data is pure CPU waste.
+    // 对已压缩的图片数据再压缩纯属浪费 CPU。
+    entry.compress = false;
+    archive.addFile(entry);
+  }
+
+  final Uint8List manifestBytes =
+      Uint8List.fromList(utf8.encode(request.manifestJson));
+  archive.addFile(
+    ArchiveFile(BackupService.manifestEntry, manifestBytes.length, manifestBytes),
+  );
+
+  final List<int>? encoded = ZipEncoder().encode(archive);
+  if (encoded == null) {
+    throw BackupException('打包失败');
+  }
+  return Uint8List.fromList(encoded);
 }

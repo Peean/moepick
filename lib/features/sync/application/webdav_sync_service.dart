@@ -161,8 +161,14 @@ class WebDavSyncService {
     final String metaPath = '$root/$metaName';
 
     try {
-      await _ensureRemoteRoot(client, root);
-
+      // Skip mkdirAll on the "already up to date" fast path: reading the sidecar
+      // is enough to decide nothing changed, and creating the folder only
+      // matters before a push. This saves a network round-trip on every no-op
+      // sync (e.g. after a background-image change, which never alters the
+      // content fingerprint).
+      // 「已是最新」快路径跳过 mkdirAll：读伴随文件即可判断无变化，建目录只在
+      // 推送前才需要。这样每次无操作同步（如改了背景图——它不改变内容指纹）
+      // 都省一次网络往返。
       final _RemoteMeta? remoteMeta = await _readRemoteMeta(client, metaPath);
       final String localFingerprint = BackupService(_store).contentFingerprint();
 
@@ -172,6 +178,7 @@ class WebDavSyncService {
       // Fresh server: nothing to compare against, so publish.
       // 全新的服务器：无可比对对象，直接发布。
       if (remoteMeta == null) {
+        await _ensureRemoteRoot(client, root);
         return _push(
           client: client,
           snapshotPath: snapshotPath,
@@ -194,6 +201,7 @@ class WebDavSyncService {
       }
 
       if (!remoteChanged && localChanged) {
+        await _ensureRemoteRoot(client, root);
         return _push(
           client: client,
           snapshotPath: snapshotPath,
