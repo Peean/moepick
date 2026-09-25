@@ -86,12 +86,12 @@ jobs:
 
       # Flutter 3.0.0 的 VS 检测只认 Visual Studio 2019，而 windows-2022 runner
       # 只装 VS 2022，会报「Visual Studio 16 2019 could not find any instance」。
-      # 改用 3.7.17（Dart 2.19，仍满足 pubspec 的 <3.0.0 约束），其对 VS 2022
+      # 改用 3.7.12（Dart 2.19，仍满足 pubspec 的 <3.0.0 约束），其对 VS 2022
       # 的支持已成熟。仅 Windows job 用此版本，Android/Linux 保持 3.0.0。
       - name: 安装 Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.7.17'
+          flutter-version: '3.7.12'
           channel: stable
           cache: true
 
