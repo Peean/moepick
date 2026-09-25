@@ -54,9 +54,49 @@ class AppLog {
   static Directory? _dir;
   static Future<void> _pending = Future<void>.value();
 
+  /// Master switch. When false nothing is written to disk or console.
+  /// 总开关。为 false 时既不写盘也不打印到控制台。
+  static bool _enabled = true;
+
+  /// Entries below this level are dropped.
+  /// 低于该等级的条目被丢弃。
+  static LogLevel _minLevel = LogLevel.info;
+
   /// Whether the logger has been pointed at a directory.
   /// 日志器是否已指向某个目录。
   static bool get isReady => _dir != null;
+
+  /// Whether logging is currently enabled.
+  /// 当前日志是否启用。
+  static bool get enabled => _enabled;
+
+  /// The minimum level currently being recorded.
+  /// 当前记录的最低等级。
+  static LogLevel get minLevel => _minLevel;
+
+  /// Adjust the master switch and minimum level at runtime.
+  /// 运行时调整总开关与最低等级。
+  ///
+  /// [level] is the numeric form persisted in settings (0=debug, 1=info,
+  /// 2=warn, 3=error).
+  /// [level] 为设置中持久化的数值形式（0=debug、1=info、2=warn、3=error）。
+  static void configure({required bool enabled, required int level}) {
+    _enabled = enabled;
+    _minLevel = _levelFromInt(level);
+  }
+
+  static LogLevel _levelFromInt(int value) {
+    switch (value) {
+      case 0:
+        return LogLevel.debug;
+      case 2:
+        return LogLevel.warn;
+      case 3:
+        return LogLevel.error;
+      default:
+        return LogLevel.info;
+    }
+  }
 
   /// Initialise the log directory under [rootPath]. Safe to call once.
   /// 在 [rootPath] 下初始化日志目录。可安全地调用一次。
@@ -64,7 +104,6 @@ class AppLog {
     final Directory dir = Directory(p.join(rootPath, _dirName));
     await dir.create(recursive: true);
     _dir = dir;
-    info('日志系统已就绪，目录：${dir.path}');
   }
 
   static void debug(String message, {Object? error, StackTrace? stack}) =>
@@ -85,6 +124,11 @@ class AppLog {
     Object? error,
     StackTrace? stack,
   }) {
+    // Master switch and level gate first: nothing below the configured level,
+    // and nothing at all when disabled.
+    // 先过总开关与等级门槛：低于配置等级不记录，关闭时一概不记录。
+    if (!_enabled || level.index < _minLevel.index) return;
+
     final String line = _format(level, message, error, stack);
 
     // Console: everything in debug builds; warn/error even in release, so the

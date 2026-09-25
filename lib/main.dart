@@ -9,6 +9,7 @@ import 'core/logging/app_log.dart';
 import 'core/storage/hive_store.dart';
 import 'core/storage/secure_store.dart';
 import 'core/utils/path_utils.dart';
+import 'data/models/app_settings.dart';
 import 'features/settings/application/storage_providers.dart';
 import 'moepick_app.dart';
 
@@ -69,8 +70,6 @@ Future<void> _bootstrap() async {
     FlutterError.presentError(details);
   };
 
-  AppLog.info('应用启动，版本 ${AppConstants.appVersion}');
-
   final HiveStore hiveStore;
   try {
     hiveStore = await HiveStore.open();
@@ -82,6 +81,16 @@ Future<void> _bootstrap() async {
     runApp(_StartupFailureApp(error: e));
     return;
   }
+
+  // Apply the persisted logging preferences before logging the startup line, so
+  // a user who disabled logging gets no startup entries either.
+  // 在记录启动日志前应用已持久化的日志偏好，
+  // 使关闭日志的用户连启动条目也不会产生。
+  final AppSettings settings = hiveStore.readSettings();
+  AppLog.configure(enabled: settings.logEnabled, level: settings.logLevel);
+  AppLog.info('日志系统已就绪，等级 ${settings.logLevel}，'
+      '开关 ${settings.logEnabled ? '开' : '关'}');
+  AppLog.info('应用启动，版本 ${AppConstants.appVersion}');
 
   runApp(
     ProviderScope(

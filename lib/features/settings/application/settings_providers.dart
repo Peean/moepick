@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/logging/app_log.dart';
 import '../../../core/state/data_version.dart';
 import '../../../core/storage/file_store.dart';
 import '../../../core/storage/hive_store.dart';
@@ -52,6 +53,20 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setCompactCards(bool value) =>
       _update(state.copyWith(compactCards: value));
+
+  /// Toggle app logging and apply it to the live logger immediately.
+  /// 切换应用日志开关，并立即应用到运行中的日志器。
+  Future<void> setLogEnabled(bool value) async {
+    await _update(state.copyWith(logEnabled: value));
+    AppLog.configure(enabled: value, level: state.logLevel);
+  }
+
+  /// Set the minimum log level (0=debug, 1=info, 2=warn, 3=error).
+  /// 设置最低日志等级（0=debug、1=info、2=warn、3=error）。
+  Future<void> setLogLevel(int value) async {
+    await _update(state.copyWith(logLevel: value));
+    AppLog.configure(enabled: state.logEnabled, level: value);
+  }
 
   /// Probe hook: reassign state without touching disk, so tests can tell the
   /// rebuild path apart from the I/O path.

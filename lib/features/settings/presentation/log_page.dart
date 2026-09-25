@@ -12,35 +12,46 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/logging/app_log.dart';
 import '../../../core/platform/file_save_service.dart';
 import '../../../core/utils/date_utils.dart' as moe;
+import '../../../data/models/app_settings.dart';
 import '../../../routes/route_paths.dart';
 import '../../../shared/widgets/common.dart';
 import '../../../shared/widgets/moe_scaffold.dart';
+import '../application/settings_providers.dart';
 
-/// View, copy, clear and export the on-disk log.
-/// 查看、复制、清空与导出磁盘日志。
+/// View, configure, copy, clear and export the on-disk log.
+/// 查看、配置、复制、清空与导出磁盘日志。
 ///
 /// The log is the primary diagnostic surface: crashes and errors are written
 /// here automatically, and this page is how a user gets the file off the device
-/// to attach to a bug report.
+/// to attach to a bug report. Logging can be toggled and its minimum level
+/// chosen here.
 ///
 /// 日志是主要的诊断途径：崩溃与错误会自动写入这里，
-/// 本页让用户能把文件从设备导出，附到问题报告里。
-class LogPage extends StatefulWidget {
+/// 本页让用户能把文件从设备导出，附到问题报告里。日志开关与最低等级也在此配置。
+class LogPage extends ConsumerStatefulWidget {
   const LogPage({Key? key}) : super(key: key);
 
   @override
-  State<LogPage> createState() => _LogPageState();
+  ConsumerState<LogPage> createState() => _LogPageState();
 }
 
-class _LogPageState extends State<LogPage> {
+class _LogPageState extends ConsumerState<LogPage> {
   String _content = '';
   bool _loading = true;
   bool _busy = false;
+
+  static const Map<int, String> _levelLabels = <int, String>{
+    0: '调试',
+    1: '信息',
+    2: '警告',
+    3: '错误',
+  };
 
   @override
   void initState() {
@@ -60,6 +71,7 @@ class _LogPageState extends State<LogPage> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final AppSettings settings = ref.watch(appSettingsProvider);
 
     return MoeScaffold(
       appBar: AppBar(
@@ -102,33 +114,104 @@ class _LogPageState extends State<LogPage> {
           ),
         ],
       ),
-      body: Stack(
+      body: Column(
         children: <Widget>[
-          if (_loading)
-            const Center(child: CircularProgressIndicator())
-          else if (_content.isEmpty)
-            const EmptyState(
-              icon: Icons.article_outlined,
-              title: '还没有日志',
-              message: '应用运行中产生的错误与关键事件会记录在这里。',
-            )
-          else
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: SelectableText(
-                _content,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  height: 1.45,
+          // Logging controls: master switch + minimum level.
+          // 日志控制：总开关 + 最低等级。
+          MoeCard(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Column(
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.tune,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '启用日志',
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ),
+                    Switch(
+                      value: settings.logEnabled,
+                      onChanged: (bool value) =>
+                          ref.read(appSettingsProvider.notifier)
+                              .setLogEnabled(value),
+                    ),
+                  ],
                 ),
-              ),
+                const Divider(height: 1),
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.filter_list,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '记录等级',
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ),
+                    DropdownButton<int>(
+                      value: settings.logLevel,
+                      underline: const SizedBox.shrink(),
+                      items: _levelLabels.entries
+                          .map((MapEntry<int, String> e) =>
+                              DropdownMenuItem<int>(
+                                value: e.key,
+                                child: Text(e.value),
+                              ))
+                          .toList(),
+                      onChanged: (int? value) {
+                        if (value == null) return;
+                        ref
+                            .read(appSettingsProvider.notifier)
+                            .setLogLevel(value);
+                      },
+                    ),
+                  ],
+                ),
+              ],
             ),
-          if (_busy)
-            ColoredBox(
-              color: Colors.black.withOpacity(0.25),
-              child: const Center(child: CircularProgressIndicator()),
+          ),
+          Expanded(
+            child: Stack(
+              children: <Widget>[
+                if (_loading)
+                  const Center(child: CircularProgressIndicator())
+                else if (_content.isEmpty)
+                  const EmptyState(
+                    icon: Icons.article_outlined,
+                    title: '还没有日志',
+                    message: '应用运行中产生的错误与关键事件会记录在这里。',
+                  )
+                else
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: SelectableText(
+                      _content,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                if (_busy)
+                  ColoredBox(
+                    color: Colors.black.withOpacity(0.25),
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -163,8 +246,8 @@ class _LogPageState extends State<LogPage> {
       final String stamp = moe.DateUtils.fileStamp(moe.DateUtils.nowUtc());
       final SaveDestination? destination =
           await FileSaveService.chooseSaveDestination(
-        suggestedName: 'moepick_log_$stamp.txt',
-        extensionLabel: 'txt',
+        suggestedName: 'moepick_log_$stamp.log',
+        extensionLabel: 'log',
       );
       if (destination == null) return;
 

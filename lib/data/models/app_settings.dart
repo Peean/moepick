@@ -225,6 +225,8 @@ class AppSettings {
     this.followSystemTheme = true,
     this.gridColumns = 3,
     this.compactCards = false,
+    this.logEnabled = true,
+    this.logLevel = 1,
   });
 
   /// Seed colour driving the generated `ColorScheme`, 0xAARRGGBB.
@@ -245,6 +247,14 @@ class AppSettings {
   /// 是否使用更紧凑的卡片内边距。
   final bool compactCards;
 
+  /// Whether app logging is enabled.
+  /// 是否启用应用日志。
+  final bool logEnabled;
+
+  /// Minimum level to record: 0=debug, 1=info, 2=warn, 3=error.
+  /// 记录的最低等级：0=debug、1=info、2=warn、3=error。
+  final int logLevel;
+
   static AppSettings defaults() => AppSettings();
 
   AppSettings copyWith({
@@ -253,6 +263,8 @@ class AppSettings {
     bool? followSystemTheme,
     int? gridColumns,
     bool? compactCards,
+    bool? logEnabled,
+    int? logLevel,
   }) {
     return AppSettings(
       seedColorValue: seedColorValue ?? this.seedColorValue,
@@ -260,6 +272,8 @@ class AppSettings {
       followSystemTheme: followSystemTheme ?? this.followSystemTheme,
       gridColumns: gridColumns ?? this.gridColumns,
       compactCards: compactCards ?? this.compactCards,
+      logEnabled: logEnabled ?? this.logEnabled,
+      logLevel: logLevel ?? this.logLevel,
     );
   }
 
@@ -269,6 +283,8 @@ class AppSettings {
         'followSystemTheme': followSystemTheme,
         'gridColumns': gridColumns,
         'compactCards': compactCards,
+        'logEnabled': logEnabled,
+        'logLevel': logLevel,
       };
 
   static AppSettings fromJson(Map<String, dynamic> json) {
@@ -278,6 +294,8 @@ class AppSettings {
       followSystemTheme: (json['followSystemTheme'] as bool?) ?? true,
       gridColumns: (json['gridColumns'] as num?)?.toInt() ?? 3,
       compactCards: (json['compactCards'] as bool?) ?? false,
+      logEnabled: (json['logEnabled'] as bool?) ?? true,
+      logLevel: (json['logLevel'] as num?)?.toInt() ?? 1,
     );
   }
 }
@@ -301,13 +319,17 @@ class AppSettingsAdapter extends TypeAdapter<AppSettings> {
       followSystemTheme: (fields[2] as bool?) ?? true,
       gridColumns: (fields[3] as int?) ?? 3,
       compactCards: (fields[4] as bool?) ?? false,
+      // Fields 5 / 6 arrived later; older records default to enabled + info.
+      // 字段 5 / 6 为后加，旧记录默认「启用 + info」。
+      logEnabled: (fields[5] as bool?) ?? true,
+      logLevel: (fields[6] as int?) ?? 1,
     );
   }
 
   @override
   void write(BinaryWriter writer, AppSettings obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.seedColorValue)
       ..writeByte(1)
@@ -317,7 +339,11 @@ class AppSettingsAdapter extends TypeAdapter<AppSettings> {
       ..writeByte(3)
       ..write(obj.gridColumns)
       ..writeByte(4)
-      ..write(obj.compactCards);
+      ..write(obj.compactCards)
+      ..writeByte(5)
+      ..write(obj.logEnabled)
+      ..writeByte(6)
+      ..write(obj.logLevel);
   }
 }
 

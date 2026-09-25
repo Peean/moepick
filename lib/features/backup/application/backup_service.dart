@@ -505,6 +505,29 @@ class BackupService {
       parts.add('t:${t.id}:${DateUtils.toEpochMs(t.updatedAt)}:${t.isDeleted}');
     }
     parts.add('cfg:${jsonEncode(_store.readSettings().toJson())}');
+
+    // The background image is part of a full backup, so its user-visible
+    // configuration must be part of the fingerprint too — otherwise changing
+    // the background leaves the fingerprint unchanged and the sync engine
+    // reports "up to date" while the server still has the old background.
+    // Derived cache fields (cachedBlurRelativePath / cachedBlurSourceHash) are
+    // deliberately excluded: they are regenerated automatically and do not
+    // represent a change the user made.
+    // 背景图是完整备份的一部分，因此其用户可见配置也必须纳入指纹——否则改背景后
+    // 指纹不变，同步引擎会报「已是最新」，而服务器上还是旧背景。
+    // 派生的缓存字段（cachedBlurRelativePath / cachedBlurSourceHash）有意排除：
+    // 它们会自动重建，不代表用户所做的改动。
+    final BackgroundConfig bg = _store.readBackground();
+    parts.add('bg:${jsonEncode(<String, dynamic>{
+          'image': bg.imageRelativePath,
+          'opacity': bg.opacity,
+          'scrimColor': bg.scrimColorValue,
+          'scrimOpacity': bg.scrimOpacity,
+          'blurSigma': bg.blurSigma,
+          'mode': bg.mode.name,
+          'useBlur': bg.useBlur,
+        })}');
+
     parts.sort();
     return HashUtils.ofString(parts.join('|'));
   }
