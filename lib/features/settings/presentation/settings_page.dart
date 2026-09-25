@@ -90,6 +90,12 @@ class SettingsPage extends ConsumerWidget {
 
           const SectionHeader('关于'),
           _SettingsTile(
+            icon: Icons.bug_report_outlined,
+            title: '运行日志',
+            subtitle: '查看与导出日志，便于排查问题',
+            onTap: () => context.go(RoutePaths.settingsLogs),
+          ),
+          _SettingsTile(
             icon: Icons.info_outline,
             title: '关于拾萌',
             subtitle: '版本 ${AppConstants.appVersion}',

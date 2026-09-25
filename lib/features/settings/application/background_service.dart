@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/logging/app_log.dart';
 import '../../../core/storage/file_store.dart';
 import '../../../core/utils/hash_utils.dart';
 import '../../../core/utils/image_utils.dart';
@@ -100,9 +101,7 @@ class BackgroundImageService {
 
       return relative;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[BackgroundImageService] pre-blur failed: $e');
-      }
+      AppLog.warn('背景预模糊失败', error: e);
       return null;
     }
   }
@@ -123,9 +122,7 @@ class BackgroundImageService {
         await entity.delete();
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[BackgroundImageService] prune failed: $e');
-      }
+      AppLog.warn('背景缓存清理失败', error: e);
     }
   }
 

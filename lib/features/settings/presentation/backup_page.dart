@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/logging/app_log.dart';
 import '../../../core/platform/file_save_service.dart';
 import '../../../core/state/data_version.dart';
 import '../../../core/storage/hive_store.dart';
@@ -151,6 +152,10 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       final BackupResult result = await service.writeTo(target, scope: scope);
 
       if (!mounted) return;
+      AppLog.info(
+        '备份导出完成：${result.path}（${result.entryCount} 条记录，'
+        '${result.imageCount} 张图片）',
+      );
 
       // Report where the file actually landed: when the chosen folder was not
       // writable the archive goes to app storage instead, and the user has to
@@ -170,6 +175,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         );
       }
     } catch (e) {
+      AppLog.error('备份导出失败', error: e);
       if (mounted) showToast(context, '导出失败：$e', isError: true);
     } finally {
       if (mounted) {
@@ -212,11 +218,13 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       ref.read(dataVersionProvider.notifier).bump();
 
       if (!mounted) return;
+      AppLog.info('从备份恢复完成：${result.summary}');
       final String message = result.skippedAssets > 0
           ? '${result.summary}；${result.skippedAssets} 张图片文件未包含在备份中'
           : result.summary;
       showToast(context, message);
     } catch (e) {
+      AppLog.error('从备份恢复失败', error: e);
       if (mounted) showToast(context, '恢复失败：$e', isError: true);
     } finally {
       if (mounted) {

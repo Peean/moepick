@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 
 import '../../../core/error/app_exception.dart';
+import '../../../core/logging/app_log.dart';
 import '../../../core/storage/hive_store.dart';
 import '../../../core/storage/secure_store.dart';
 import '../../../core/utils/date_utils.dart';
@@ -224,7 +224,7 @@ class WebDavSyncService {
       }
       return pulled;
     } catch (e) {
-      if (kDebugMode) debugPrint('[WebDavSync] failed: $e');
+      AppLog.error('WebDAV 同步失败', error: e);
       return SyncReport(
         outcome: SyncOutcome.failed,
         message: _friendlyError(e),
@@ -267,6 +267,7 @@ class WebDavSyncService {
         reportMessage: '备份已上传到服务器',
       );
     } catch (e) {
+      AppLog.error('上传备份失败', error: e);
       return SyncReport(
         outcome: SyncOutcome.failed,
         message: _friendlyError(e),
@@ -314,6 +315,7 @@ class WebDavSyncService {
         remote: remote,
       );
     } catch (e) {
+      AppLog.error('拉取备份失败', error: e);
       return SyncReport(
         outcome: SyncOutcome.failed,
         message: _friendlyError(e),

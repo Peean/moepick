@@ -1,6 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../logging/app_log.dart';
 
 /// Secure credential storage for the WebDAV connection.
 /// WebDAV 连接的凭据安全存储。
@@ -95,9 +96,7 @@ class SecureStore {
       if (value != null) return value;
     } catch (e) {
       _degraded = true;
-      if (kDebugMode) {
-        debugPrint('[SecureStore] secure read failed for $key, falling back: $e');
-      }
+      AppLog.warn('安全存储读取失败，已降级：$key', error: e);
     }
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString(key);
@@ -109,9 +108,7 @@ class SecureStore {
       return;
     } catch (e) {
       _degraded = true;
-      if (kDebugMode) {
-        debugPrint('[SecureStore] secure write failed for $key, falling back: $e');
-      }
+      AppLog.warn('安全存储写入失败，已降级：$key', error: e);
     }
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString(key, value);

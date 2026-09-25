@@ -8,6 +8,7 @@ import '../features/series/presentation/series_detail_page.dart';
 import '../features/series/presentation/series_edit_page.dart';
 import '../features/settings/presentation/background_settings_page.dart';
 import '../features/settings/presentation/backup_page.dart';
+import '../features/settings/presentation/log_page.dart';
 import '../features/settings/presentation/settings_page.dart';
 import '../features/settings/presentation/taxonomy_page.dart';
 import '../features/settings/presentation/theme_settings_page.dart';
@@ -78,6 +79,11 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
                 path: 'webdav',
                 pageBuilder: (BuildContext context, GoRouterState state) =>
                     _fadeThroughPage(const WebDavSettingsPage(), state),
+              ),
+              GoRoute(
+                path: 'logs',
+                pageBuilder: (BuildContext context, GoRouterState state) =>
+                    _fadeThroughPage(const LogPage(), state),
               ),
             ],
           ),

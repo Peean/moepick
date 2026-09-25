@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/logging/app_log.dart';
 import '../../../core/state/data_version.dart';
 import '../../../core/storage/file_store.dart';
 import '../../../core/utils/date_utils.dart';
@@ -149,9 +149,7 @@ class LibraryActions {
         // rest of the batch.
         // 单个坏文件（图片损坏、权限不足）不应中断整批导入。
         failed++;
-        if (kDebugMode) {
-          debugPrint('[LibraryActions] import failed for $path: $e');
-        }
+        AppLog.warn('导入失败：$path', error: e);
       }
     }
 

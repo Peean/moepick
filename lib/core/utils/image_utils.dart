@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../error/app_exception.dart';
+import '../logging/app_log.dart';
 import '../utils/hash_utils.dart';
 import '../utils/path_utils.dart';
 
@@ -223,9 +223,7 @@ Future<ui.Image?> loadUiImage(File file, {int? cacheWidth}) async {
     final ui.FrameInfo frame = await codec.getNextFrame();
     return frame.image;
   } catch (e) {
-    if (kDebugMode) {
-      debugPrint('[ImageUtils] loadUiImage failed for ${file.path}: $e');
-    }
+    AppLog.warn('加载图片失败：${file.path}', error: e);
     return null;
   }
 }
@@ -272,9 +270,7 @@ Future<ui.Image?> blurUiImage(ui.Image source, double sigma) async {
     final ui.FrameInfo frame = await codec.getNextFrame();
     return frame.image;
   } catch (e) {
-    if (kDebugMode) {
-      debugPrint('[ImageUtils] blurUiImage failed: $e');
-    }
+    AppLog.warn('预览模糊失败', error: e);
     return null;
   }
 }

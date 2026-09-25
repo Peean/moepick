@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../../data/models/sticker.dart';
 import '../constants/app_constants.dart';
 import '../error/app_exception.dart';
+import '../logging/app_log.dart';
 import '../utils/date_utils.dart';
 import '../utils/id_utils.dart';
 import '../utils/image_utils.dart';
@@ -130,9 +131,7 @@ class FileStore {
         await thumbFile.writeAsBytes(thumbBytes, flush: true);
         thumbRel = thumbPathRel;
       } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[FileStore] thumbnail write failed: $e');
-        }
+        AppLog.warn('缩略图写入失败', error: e);
       }
     }
 
@@ -191,9 +190,7 @@ class FileStore {
       );
       await file.rename(target);
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[FileStore] moveToTrash failed for $relativePath: $e');
-      }
+      AppLog.warn('移入回收站失败：$relativePath', error: e);
     }
   }
 
@@ -206,9 +203,7 @@ class FileStore {
         await file.delete();
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[FileStore] delete failed for $relativePath: $e');
-      }
+      AppLog.warn('删除文件失败：$relativePath', error: e);
     }
   }
 
@@ -230,9 +225,7 @@ class FileStore {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[FileStore] purgeTrash failed: $e');
-      }
+      AppLog.warn('回收站清理失败', error: e);
     }
     return removed;
   }

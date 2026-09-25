@@ -22,6 +22,7 @@ class RoutePaths {
   static const String settingsTrash = '/settings/trash';
   static const String settingsBackup = '/settings/backup';
   static const String settingsWebdav = '/settings/webdav';
+  static const String settingsLogs = '/settings/logs';
   static const String settingsAbout = '/settings/about';
 
   /// Build a series detail location.
