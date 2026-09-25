@@ -104,15 +104,16 @@ jobs:
 
       # windows-2022 runner 预装 Visual Studio 2022 + C++ 桌面工作负载。
       - name: 构建 Windows 桌面
-        run: flutter build windows --release
+        run: flutter build windows --release -v
 
-      # 列出 build 目录，便于定位产物实际路径。
+      # 列出 build 目录，便于定位产物实际路径（PowerShell 语法）。
       - name: 列出产物
+        shell: pwsh
         run: |
-          echo "=== build/windows 目录树 ==="
-          find build/windows -maxdepth 4 -type d 2>/dev/null || true
-          echo "=== exe / dll 文件 ==="
-          find build/windows -name "*.exe" -o -name "*.dll" 2>/dev/null | head -50 || true
+          Write-Host "=== build/windows 目录树 ==="
+          Get-ChildItem -Path build/windows -Recurse -Directory | ForEach-Object { $_.FullName }
+          Write-Host "=== exe / dll 文件 ==="
+          Get-ChildItem -Path build/windows -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { $_.FullName }
 
       - name: 上传 Windows 产物
         uses: actions/upload-artifact@v4
