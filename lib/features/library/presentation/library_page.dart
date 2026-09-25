@@ -185,25 +185,25 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
     );
   }
 
-  /// A rounded segmented control for the two top-level tabs. The thumb is a
-  /// filled pill that slides between 「图库」 and 「收藏」, which reads far more
-  /// polished than the default underline TabBar.
-  /// 两个顶层标签的圆角分段控件。滑块是一个实心胶囊，在「图库」与「收藏」之间
-  /// 滑动，观感远胜默认的下划线 TabBar。
+  /// A compact, centred segmented control for the two top-level tabs. Sizing to
+  /// its content (not the full row) keeps the pill small and precise, and the
+  /// filled thumb slides between 「图库」 and 「收藏」.
+  /// 两个顶层标签的居中紧凑分段控件。宽度随内容自适应（不占满整行），
+  /// 使胶囊小巧精致；实心滑块在「图库」与「收藏」之间滑动。
   PreferredSizeWidget _buildPillTabs() {
     final ThemeData theme = Theme.of(context);
     return PreferredSize(
-      preferredSize: const Size.fromHeight(62),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+      preferredSize: const Size.fromHeight(54),
+      child: Center(
         child: Container(
-          height: 44,
-          padding: const EdgeInsets.all(4),
+          margin: const EdgeInsets.only(top: 4, bottom: 10),
+          padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: theme.colorScheme.onSurface.withOpacity(0.06),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(21),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               _PillSegment(
                 controller: _tabs,
@@ -498,45 +498,44 @@ class _PillSegment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    return Expanded(
-      child: AnimatedBuilder(
-        animation: controller.animation!,
-        builder: (BuildContext context, Widget? child) {
-          final bool selected = controller.index == index;
-          final Color foreground = selected
-              ? theme.colorScheme.onPrimary
-              : theme.colorScheme.onSurface.withOpacity(0.65);
-          return GestureDetector(
-            onTap: () => controller.animateTo(index),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              decoration: BoxDecoration(
-                color: selected
-                    ? theme.colorScheme.primary
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(icon, size: 18, color: foreground),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.w500,
-                      color: foreground,
-                    ),
-                  ),
-                ],
-              ),
+    return AnimatedBuilder(
+      animation: controller.animation!,
+      builder: (BuildContext context, Widget? child) {
+        final bool selected = controller.index == index;
+        final Color foreground = selected
+            ? theme.colorScheme.onPrimary
+            : theme.colorScheme.onSurface.withOpacity(0.65);
+        return GestureDetector(
+          onTap: () => controller.animateTo(index),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? theme.colorScheme.primary
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
             ),
-          );
-        },
-      ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(icon, size: 17, color: foreground),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight:
+                        selected ? FontWeight.w600 : FontWeight.w500,
+                    color: foreground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

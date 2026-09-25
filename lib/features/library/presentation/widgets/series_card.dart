@@ -8,6 +8,7 @@ import '../../../../data/models/category.dart';
 import '../../../../data/models/series.dart';
 import '../../../../data/models/sticker.dart';
 import '../../../../data/models/tag.dart';
+import '../../../../shared/widgets/status_badges.dart';
 import '../../../library/application/library_providers.dart';
 
 /// A cover tile for one series in the library grid.
@@ -139,6 +140,17 @@ class SeriesCard extends ConsumerWidget {
               Icons.check_circle,
               size: 22,
               color: theme.colorScheme.primary,
+            ),
+          ),
+        // Pin / favourite status, so it reads without opening the series.
+        // 置顶 / 收藏状态标识，无需点进系列即可看到。
+        if (series.pinned || series.favorite)
+          Positioned(
+            top: 8,
+            left: 8,
+            child: StatusBadges(
+              pinned: series.pinned,
+              favorite: series.favorite,
             ),
           ),
       ],

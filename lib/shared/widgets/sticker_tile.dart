@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/utils/path_utils.dart';
 import '../../data/models/sticker.dart';
+import 'status_badges.dart';
 
 /// A single sticker thumbnail tile.
 /// 单个表情包缩略图瓦片。
@@ -51,6 +52,17 @@ class StickerTile extends StatelessWidget {
         _StickerImage(storedPath: stored, cacheWidth: cacheWidth),
         if (selected)
           ColoredBox(color: theme.colorScheme.primary.withOpacity(0.18)),
+        // Pin / favourite status, so it reads without opening the sticker.
+        // 置顶 / 收藏状态标识，无需点进表情包即可看到。
+        if (sticker.pinned || sticker.favorite)
+          Positioned(
+            top: 6,
+            left: 6,
+            child: StatusBadges(
+              pinned: sticker.pinned,
+              favorite: sticker.favorite,
+            ),
+          ),
       ],
     );
 
