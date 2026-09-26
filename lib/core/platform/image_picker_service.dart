@@ -4,6 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../utils/path_utils.dart';
 
@@ -103,6 +105,17 @@ class ImagePickerService {
     // Android 用 file_picker：`image_picker` 只暴露缓存路径（文件名是媒体库 id），
     // 用户真正认识的原始文件名会丢失；file_picker 返回 DISPLAY_NAME 即真实文件名。
     if (Platform.isAndroid) {
+      // file_picker caches picked files under `<cache>/file_picker/<name>` and
+      // *skips the copy when a file with that name already exists*. Two
+      // different images sharing a name (e.g. two different "无语.gif") would
+      // therefore both resolve to the first one's bytes → wrong hash → false
+      // duplicate. Clearing the cache forces a fresh copy each time.
+      // file_picker 把所选文件缓存到 `<cache>/file_picker/<名字>`，且当同名文件
+      // 已存在时**跳过复制**。两张同名但内容不同的图（如两个不同的「无语.gif」）
+      // 就会都解析到第一张的字节 → 哈希错误 → 误判重复。每次选图前清空缓存，
+      // 强制重新复制。
+      await _clearFilePickerCache();
+
       final FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: true,
@@ -144,5 +157,26 @@ class ImagePickerService {
           ? ''
           : PathUtils.baseNameWithoutExt(originalName),
     );
+  }
+
+  /// Delete file_picker's cache directory so the next pick re-copies files.
+  /// 删除 file_picker 的缓存目录，使下次选图重新复制文件。
+  ///
+  /// Best-effort: file_picker's cache is disposable and this is only needed to
+  /// defeat its same-name cache collision, so a failure here must never block
+  /// the pick.
+  /// 尽力而为：file_picker 的缓存本就可丢弃，此操作仅用于规避其同名缓存冲突，
+  /// 因此失败绝不应阻断选图。
+  static Future<void> _clearFilePickerCache() async {
+    try {
+      final Directory temp = await getTemporaryDirectory();
+      final Directory cache = Directory(p.join(temp.path, 'file_picker'));
+      if (await cache.exists()) {
+        await cache.delete(recursive: true);
+      }
+    } catch (_) {
+      // Ignore: the pick still proceeds, just without the cache clearing.
+      // 忽略：选图仍会继续，只是未清理缓存。
+    }
   }
 }
