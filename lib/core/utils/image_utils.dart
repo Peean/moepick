@@ -330,26 +330,48 @@ ImportProcessResult processImportImage(ImportProcessRequest request) {
   int height = 0;
   Uint8List? thumb;
 
-  final img.Image? decoded = img.decodeImage(request.bytes);
-  if (decoded != null) {
-    width = decoded.width;
-    height = decoded.height;
+  try {
+    final img.Image? decoded = img.decodeImage(request.bytes);
+    if (decoded != null) {
+      width = decoded.width;
+      height = decoded.height;
 
-    final int longest =
-        decoded.width > decoded.height ? decoded.width : decoded.height;
-    final img.Image resized = longest <= request.thumbMaxSize
-        ? decoded
-        : img.copyResize(
-            decoded,
-            width: decoded.width >= decoded.height
-                ? request.thumbMaxSize
-                : null,
-            height: decoded.height > decoded.width
-                ? request.thumbMaxSize
-                : null,
-            interpolation: img.Interpolation.average,
-          );
-    thumb = Uint8List.fromList(img.encodeJpg(resized, quality: 82));
+      final int longest =
+          decoded.width > decoded.height ? decoded.width : decoded.height;
+      final img.Image resized = longest <= request.thumbMaxSize
+          ? decoded
+          : img.copyResize(
+              decoded,
+              width: decoded.width >= decoded.height
+                  ? request.thumbMaxSize
+                  : null,
+              height: decoded.height > decoded.width
+                  ? request.thumbMaxSize
+                  : null,
+              interpolation: img.Interpolation.average,
+            );
+      thumb = Uint8List.fromList(img.encodeJpg(resized, quality: 82));
+    }
+  } catch (_) {
+    // Decoding can throw for a handful of reasons that are all non-fatal to the
+    // *import* itself:
+    //   - `package:image` 4.2.0's GIF decoder hits `info!.globalColorMap!` /
+    //     `info!.backgroundColor!` on GIFs whose frame lacks a local colour table
+    //     and have no global one ("Null check operator used on a null value").
+    //   - Corrupt/truncated files that the decoder cannot fully parse.
+    // The original bytes are still valid on disk and are what the gallery
+    // displays (Flutter's own codec decodes GIFs fine), so importing must not
+    // fail just because we could not measure/thumbnail them here. We degrade to
+    // width/height = 0 and no thumbnail; the tile then falls back to the source
+    // image.
+    // 解码抛异常有几种原因，但它们对「导入」本身都非致命：
+    //   - package:image 4.2.0 的 GIF 解码器在「帧缺局部颜色表且无全局颜色表」的
+    //     GIF 上触发 `info!.globalColorMap!` / `info!.backgroundColor!`
+    //     （"Null check operator used on a null value"）。
+    //   - 损坏/截断的文件，解码器无法完整解析。
+    // 原始字节在磁盘上仍有效，且图库显示用的正是它（Flutter 自带编解码器能正常
+    // 解码 GIF），因此不能仅仅因为这里无法取尺寸/生成缩略图就让导入失败。
+    // 这里降级为宽高 0、无缩略图，瓦片随后回退到源图。
   }
 
   return ImportProcessResult(

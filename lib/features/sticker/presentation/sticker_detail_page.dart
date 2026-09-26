@@ -205,7 +205,12 @@ class StickerDetailPage extends ConsumerWidget {
           MoeCard(
             child: Column(
               children: <Widget>[
-                _InfoRow(label: '尺寸', value: '${sticker.width} × ${sticker.height}'),
+                _InfoRow(
+                  label: '尺寸',
+                  value: (sticker.width > 0 && sticker.height > 0)
+                      ? '${sticker.width} × ${sticker.height}'
+                      : '未知',
+                ),
                 _InfoRow(label: '大小', value: _formatBytes(sticker.byteSize)),
                 _InfoRow(
                   label: '导入时间',
