@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/logging/app_log.dart';
+import '../../../core/platform/image_picker_service.dart';
 import '../../../core/state/data_version.dart';
 import '../../../core/storage/file_store.dart';
 import '../../../core/utils/date_utils.dart';
@@ -182,7 +183,7 @@ class LibraryActions {
   /// 而不必对每个文件重读全部表情包（那将是 O(n·m)）。
   Future<ImportBatchResult> importStickers({
     required String seriesId,
-    required List<String> sourcePaths,
+    required List<PickedImage> images,
   }) async {
     final StickerRepository stickers = _ref.read(stickerRepositoryProvider);
     final FileStore files = _ref.read(fileStoreProvider);
@@ -201,11 +202,13 @@ class LibraryActions {
     // 序号接续已有表情包，使本批次排在末尾。
     int sortIndex = stickers.countBySeries(seriesId);
 
-    for (final String path in sourcePaths) {
+    for (final PickedImage image in images) {
+      final String path = image.path;
       try {
         final ImportOutcome outcome = await files.importImage(
           sourcePath: path,
           seriesId: seriesId,
+          name: image.name,
           existingHashes: hashIndex,
           sortIndex: sortIndex,
         );
@@ -224,7 +227,12 @@ class LibraryActions {
         // rest of the batch.
         // 单个坏文件（图片损坏、权限不足）不应中断整批导入。
         failed++;
-        failedFiles.add(PathUtils.baseName(path));
+        // Prefer the original name in the failure list; fall back to the path's
+        // last segment when the platform gave no name.
+        // 失败列表优先用原始文件名；平台未提供时回退到路径最后一段。
+        failedFiles.add(image.name.isNotEmpty
+            ? image.name
+            : PathUtils.baseName(path));
         AppLog.warn('导入失败：$path', error: e);
       }
     }

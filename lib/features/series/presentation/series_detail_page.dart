@@ -299,14 +299,14 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
   Future<void> _importStickers(Series series) async {
     setState(() => _busy = true);
     try {
-      final List<String> paths = await ImagePickerService.pickMultiple();
-      if (paths.isEmpty) return;
+      final List<PickedImage> images = await ImagePickerService.pickMultiple();
+      if (images.isEmpty) return;
 
       final result = await ref
           .read(libraryActionsProvider)
           .importStickers(
             seriesId: series.id,
-            sourcePaths: paths,
+            images: images,
           );
 
       if (!mounted) return;
