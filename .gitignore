@@ -55,3 +55,6 @@ app.*.map.json
 
 # 打包产物(APK 二进制不提交)
 /dist/
+
+# 签名 Secrets 临时文件
+/signing-secrets.txt
