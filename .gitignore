@@ -46,5 +46,12 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# 签名密钥(严禁提交)
+/android/key.properties
+/android/app/*.jks
+/android/app/*.keystore
+*.jks
+*.keystore
+
 # 打包产物(APK 二进制不提交)
 /dist/
