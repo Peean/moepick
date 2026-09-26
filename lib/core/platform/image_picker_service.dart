@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
@@ -95,7 +96,30 @@ class ImagePickerService {
   static Future<List<PickedImage>> pickMultiple() async {
     if (kIsWeb) return <PickedImage>[];
 
-    if (Platform.isAndroid || Platform.isIOS) {
+    // Android uses file_picker: `image_picker` only surfaces a cache path whose
+    // file name is a media-store id, so the original name (the one the user
+    // actually recognises) is lost. file_picker returns DISPLAY_NAME, which is
+    // the real file name.
+    // Android 用 file_picker：`image_picker` 只暴露缓存路径（文件名是媒体库 id），
+    // 用户真正认识的原始文件名会丢失；file_picker 返回 DISPLAY_NAME 即真实文件名。
+    if (Platform.isAndroid) {
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+      );
+      if (result == null) return <PickedImage>[];
+      return result.files
+          .where((PlatformFile f) => f.path != null)
+          .map((PlatformFile f) => PickedImage(
+                path: f.path!,
+                name: f.name.isNotEmpty
+                    ? PathUtils.baseNameWithoutExt(f.name)
+                    : '',
+              ))
+          .toList();
+    }
+
+    if (Platform.isIOS) {
       final List<XFile> picked = await ImagePicker().pickMultiImage();
       return picked.map(_toPickedImage).toList();
     }

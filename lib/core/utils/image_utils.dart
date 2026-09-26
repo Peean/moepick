@@ -296,16 +296,24 @@ class ImportProcessResult {
     required this.width,
     required this.height,
     this.thumbBytes,
+    this.thumbExtension = '.jpg',
   });
 
   final String sha256;
   final int width;
   final int height;
 
-  /// JPEG thumbnail bytes, or null when decoding failed (never for a valid
-  /// image, but defensive).
-  /// JPEG 缩略图字节；解码失败时为 null（对有效图片不应发生，属防御性）。
+  /// Thumbnail bytes, or null when decoding failed (never for a valid image,
+  /// but defensive).
+  /// 缩略图字节；解码失败时为 null（对有效图片不应发生，属防御性）。
   final Uint8List? thumbBytes;
+
+  /// File extension for [thumbBytes]: '.png' for images with transparency,
+  /// '.jpg' otherwise. JPEG cannot represent an alpha channel, so a transparent
+  /// PNG encoded as JPEG would show a black background.
+  /// [thumbBytes] 的文件扩展名：有透明通道时用 '.png'，否则 '.jpg'。
+  /// JPEG 无法表达 alpha 通道，透明 PNG 若压成 JPEG 会显示黑底。
+  final String thumbExtension;
 }
 
 /// Top-level isolate worker for a single imported image: hash, measure and
@@ -329,6 +337,7 @@ ImportProcessResult processImportImage(ImportProcessRequest request) {
   int width = 0;
   int height = 0;
   Uint8List? thumb;
+  String thumbExtension = '.jpg';
 
   try {
     final img.Image? decoded = img.decodeImage(request.bytes);
@@ -350,7 +359,18 @@ ImportProcessResult processImportImage(ImportProcessRequest request) {
                   : null,
               interpolation: img.Interpolation.average,
             );
-      thumb = Uint8List.fromList(img.encodeJpg(resized, quality: 82));
+
+      // JPEG drops the alpha channel (transparent pixels turn black), so images
+      // with transparency must be thumbnailed as PNG to preserve the clear
+      // background the user expects.
+      // JPEG 会丢弃 alpha 通道（透明像素变黑），因此带透明的图片必须用 PNG 缩略图，
+      // 以保留用户期望的透明背景。
+      if (decoded.hasAlpha) {
+        thumb = Uint8List.fromList(img.encodePng(resized));
+        thumbExtension = '.png';
+      } else {
+        thumb = Uint8List.fromList(img.encodeJpg(resized, quality: 82));
+      }
     }
   } catch (_) {
     // Decoding can throw for a handful of reasons that are all non-fatal to the
@@ -379,5 +399,6 @@ ImportProcessResult processImportImage(ImportProcessRequest request) {
     width: width,
     height: height,
     thumbBytes: thumb,
+    thumbExtension: thumbExtension,
   );
 }

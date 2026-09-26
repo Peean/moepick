@@ -124,8 +124,12 @@ class FileStore {
     final Uint8List? thumbBytes = processed.thumbBytes;
     if (thumbBytes != null) {
       try {
+        // Thumbnail extension follows the encoding (PNG for transparent images,
+        // JPEG otherwise) so the stored file matches its actual format.
+        // 缩略图扩展名跟随编码（透明图 PNG、其余 JPEG），
+        // 使落盘文件与其真实格式一致。
         final String thumbPathRel =
-            PathUtils.thumbRelativePath(stickerId, '.jpg');
+            PathUtils.thumbRelativePath(stickerId, processed.thumbExtension);
         final File thumbFile = File(await PathUtils.absolute(thumbPathRel));
         await thumbFile.parent.create(recursive: true);
         await thumbFile.writeAsBytes(thumbBytes, flush: true);
