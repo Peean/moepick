@@ -6,6 +6,7 @@ import '../../../core/state/data_version.dart';
 import '../../../core/storage/file_store.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/id_utils.dart';
+import '../../../core/utils/path_utils.dart';
 import '../../../data/models/series.dart';
 import '../../../data/models/sticker.dart';
 import '../../../data/repositories/repository_contracts.dart';
@@ -194,6 +195,7 @@ class LibraryActions {
     final List<Sticker> created = <Sticker>[];
     int duplicates = 0;
     int failed = 0;
+    final List<String> failedFiles = <String>[];
 
     // Continue numbering after existing stickers so the batch appears last.
     // 序号接续已有表情包，使本批次排在末尾。
@@ -222,6 +224,7 @@ class LibraryActions {
         // rest of the batch.
         // 单个坏文件（图片损坏、权限不足）不应中断整批导入。
         failed++;
+        failedFiles.add(PathUtils.baseName(path));
         AppLog.warn('导入失败：$path', error: e);
       }
     }
@@ -236,6 +239,7 @@ class LibraryActions {
       imported: created.length,
       duplicates: duplicates,
       failed: failed,
+      failedFiles: failedFiles,
     );
   }
 
@@ -481,11 +485,19 @@ class ImportBatchResult {
     required this.imported,
     required this.duplicates,
     required this.failed,
+    this.failedFiles = const <String>[],
   });
 
   final int imported;
   final int duplicates;
   final int failed;
+
+  /// Display names (source file names, not full paths) of the files that
+  /// failed to import, so the user can see exactly which ones need attention
+  /// instead of hunting through the whole batch.
+  /// 导入失败文件的显示名（源文件名，非完整路径），
+  /// 使用户能确切看到哪些文件需要处理，而非在整批里逐一寻找。
+  final List<String> failedFiles;
 
   int get total => imported + duplicates + failed;
 

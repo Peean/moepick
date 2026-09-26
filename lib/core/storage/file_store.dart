@@ -140,7 +140,14 @@ class FileStore {
       sticker: Sticker(
         id: stickerId,
         seriesId: seriesId,
-        name: name ?? '',
+        // Default the display name to the source file name (without extension)
+        // so imports carry a meaningful name instead of a blank one. An
+        // explicitly supplied name still wins.
+        // 默认用源文件名（不含扩展名）作为显示名，使导入的表情包带有意义的名字
+        // 而非空白；显式传入的名字仍优先。
+        name: (name == null || name.isEmpty)
+            ? PathUtils.baseNameWithoutExt(sourcePath)
+            : name,
         relativePath: imageRel,
         thumbPath: thumbRel,
         width: processed.width,

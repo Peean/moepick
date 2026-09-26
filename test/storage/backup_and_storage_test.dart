@@ -371,6 +371,37 @@ void main() {
       expect(await files.exists(outcome.sticker.relativePath), true);
     });
 
+    test('defaults the sticker name to the source file name', () async {
+      final String source = await env.writeSourceFile(
+        '我的表情.png',
+        TestEnv.tinyPng,
+      );
+      final FileStore files = FileStore();
+
+      final ImportOutcome outcome = await files.importImage(
+        sourcePath: source,
+        seriesId: 'ser-1',
+      );
+
+      expect(outcome.sticker.name, '我的表情');
+    });
+
+    test('an explicit name wins over the source file name', () async {
+      final String source = await env.writeSourceFile(
+        'source.png',
+        TestEnv.tinyPng,
+      );
+      final FileStore files = FileStore();
+
+      final ImportOutcome outcome = await files.importImage(
+        sourcePath: source,
+        seriesId: 'ser-1',
+        name: '显式名字',
+      );
+
+      expect(outcome.sticker.name, '显式名字');
+    });
+
     test('a second import of identical bytes is reported as a duplicate',
         () async {
       final String source =

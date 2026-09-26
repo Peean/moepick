@@ -310,13 +310,98 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
           );
 
       if (!mounted) return;
+
+      if (result.failed > 0) {
+        // Show exactly which files failed, so the user does not have to hunt
+        // through the batch one by one.
+        // 精确展示哪些文件失败，使用户不必在整批里逐一查找。
+        await _showImportFailures(result);
+        return;
+      }
+
       final String message = _importMessage(result);
-      showToast(context, message, isError: result.imported == 0);
+      showToast(context, message);
     } catch (e) {
       if (mounted) showToast(context, '导入失败：$e', isError: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Dialog listing the files that failed to import, alongside the summary of
+  /// what did import.
+  /// 列出导入失败文件的对话框，并附带成功导入的汇总。
+  Future<void> _showImportFailures(ImportBatchResult result) async {
+    final List<String> failedFiles = result.failedFiles;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) {
+        final ThemeData theme = Theme.of(ctx);
+        return AlertDialog(
+          title: const Text('部分文件导入失败'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  '成功导入 ${result.imported} 张，失败 ${result.failed} 张'
+                  '${result.duplicates > 0 ? '，跳过 ${result.duplicates} 张重复' : ''}。',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '失败的文件：',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        for (final String name in failedFiles)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Icon(
+                                  Icons.broken_image_outlined,
+                                  size: 16,
+                                  color: theme.colorScheme.error,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   /// Summarise an import run, distinguishing new from duplicate files.
@@ -328,9 +413,6 @@ class _SeriesDetailPageState extends ConsumerState<SeriesDetailPage> {
     final List<String> parts = <String>['导入 ${result.imported} 张'];
     if (result.duplicates > 0) {
       parts.add('跳过 ${result.duplicates} 张重复');
-    }
-    if (result.failed > 0) {
-      parts.add('${result.failed} 张失败');
     }
     return parts.join('，');
   }
