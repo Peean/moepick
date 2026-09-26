@@ -188,10 +188,19 @@ class LibraryActions {
     final StickerRepository stickers = _ref.read(stickerRepositoryProvider);
     final FileStore files = _ref.read(fileStoreProvider);
 
-    // sha256 -> stickerId, seeded from the live library and grown as we go.
-    // sha256 -> stickerId，以当前库为初始值，并随进度增长。
-    final Map<String, String> hashIndex =
-        Map<String, String>.from(stickers.hashIndex());
+    // sha256 -> stickerId, seeded from the target series only and grown as we
+    // go. De-duplication is per-series: the same image may legitimately live in
+    // several series (e.g. the same "无语" sticker in both a daily and a work
+    // series), so a hash in another series must NOT block this import.
+    // sha256 -> stickerId，仅以目标系列为初始值，并随进度增长。去重范围是系列内：
+    // 同一张图可以合理存在于多个系列（例如「日常」和「工作」两个系列都放同一张
+    // 「无语」），因此其他系列的哈希不应阻止本次导入。
+    final Map<String, String> hashIndex = <String, String>{};
+    for (final Sticker s in stickers.getBySeries(seriesId)) {
+      if (s.sha256.isNotEmpty) {
+        hashIndex[s.sha256] = s.id;
+      }
+    }
 
     final List<Sticker> created = <Sticker>[];
     int duplicates = 0;
