@@ -526,7 +526,16 @@ class _SyncActionCard extends StatelessWidget {
               ),
               ElevatedButton(
                 onPressed: running ? null : onSync,
-                child: Text(running ? '同步中' : '同步'),
+                // Show a percentage while the engine reports progress, so a
+                // large-library sync reads as "working" instead of frozen.
+                // 引擎上报进度时显示百分比，使大库同步表现为「在干活」而非卡死。
+                child: Text(
+                  running
+                      ? (status.progress != null
+                          ? '同步中 ${(status.progress! * 100).round()}%'
+                          : '同步中')
+                      : '同步',
+                ),
               ),
             ],
           ),

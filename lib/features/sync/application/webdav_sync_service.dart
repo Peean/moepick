@@ -133,16 +133,25 @@ class WebDavSyncService {
         message: '连接成功，远端文件夹可用',
       );
     } catch (e) {
+      AppLog.error('WebDAV 测试连接失败', error: e);
       return SyncReport(
         outcome: SyncOutcome.failed,
-        message: _friendlyError(e),
+        message: friendlyError(e),
       );
     }
   }
 
   /// Run one synchronisation pass.
   /// 执行一次同步。
-  Future<SyncReport> sync(WebDavCredentials credentials) async {
+  ///
+  /// [onProgress] reports coarse progress in 0.0–1.0 so the UI can show "45%"
+  /// instead of a silent multi-minute wait on large libraries.
+  /// [onProgress] 以 0.0–1.0 上报粗粒度进度，使界面在大库上显示「45%」，
+  /// 而不是长达数分钟的无声等待。
+  Future<SyncReport> sync(
+    WebDavCredentials credentials, {
+    void Function(double progress)? onProgress,
+  }) async {
     if (!credentials.isConfigured) {
       return const SyncReport(
         outcome: SyncOutcome.skipped,
@@ -186,6 +195,7 @@ class WebDavSyncService {
           deviceId: deviceId,
           fingerprint: localFingerprint,
           reportMessage: '已上传本地数据到服务器',
+          onProgress: onProgress,
         );
       }
 
@@ -209,6 +219,7 @@ class WebDavSyncService {
           deviceId: deviceId,
           fingerprint: localFingerprint,
           reportMessage: '已上传本地变更',
+          onProgress: onProgress,
         );
       }
 
@@ -221,6 +232,7 @@ class WebDavSyncService {
         snapshotPath: snapshotPath,
         deviceId: deviceId,
         remote: effective,
+        onProgress: onProgress,
       );
 
       if (localChanged && pulled.outcome == SyncOutcome.pulled) {
@@ -235,7 +247,7 @@ class WebDavSyncService {
       AppLog.error('WebDAV 同步失败', error: e);
       return SyncReport(
         outcome: SyncOutcome.failed,
-        message: _friendlyError(e),
+        message: friendlyError(e),
       );
     }
   }
@@ -249,7 +261,10 @@ class WebDavSyncService {
   ///
   /// 与 [sync] 不同，此方法完全无视指纹比对——它是用户明确要求的「立即把我的
   /// 数据推上去」，适合在大量整理之后、或换设备之前使用。
-  Future<SyncReport> uploadBackup(WebDavCredentials credentials) async {
+  Future<SyncReport> uploadBackup(
+    WebDavCredentials credentials, {
+    void Function(double progress)? onProgress,
+  }) async {
     if (!credentials.isConfigured) {
       return const SyncReport(
         outcome: SyncOutcome.skipped,
@@ -273,12 +288,13 @@ class WebDavSyncService {
         deviceId: deviceId,
         fingerprint: fingerprint,
         reportMessage: '备份已上传到服务器',
+        onProgress: onProgress,
       );
     } catch (e) {
       AppLog.error('上传备份失败', error: e);
       return SyncReport(
         outcome: SyncOutcome.failed,
-        message: _friendlyError(e),
+        message: friendlyError(e),
       );
     }
   }
@@ -292,7 +308,10 @@ class WebDavSyncService {
   ///
   /// 这是用户明确要求的「从服务器恢复」：不咨询指纹，直接取服务器上的内容覆盖
   /// 本地库。调用方必须先向用户确认。
-  Future<SyncReport> pullBackup(WebDavCredentials credentials) async {
+  Future<SyncReport> pullBackup(
+    WebDavCredentials credentials, {
+    void Function(double progress)? onProgress,
+  }) async {
     if (!credentials.isConfigured) {
       return const SyncReport(
         outcome: SyncOutcome.skipped,
@@ -321,12 +340,13 @@ class WebDavSyncService {
         snapshotPath: '$root/$snapshotName',
         deviceId: deviceId,
         remote: remote,
+        onProgress: onProgress,
       );
     } catch (e) {
       AppLog.error('拉取备份失败', error: e);
       return SyncReport(
         outcome: SyncOutcome.failed,
-        message: _friendlyError(e),
+        message: friendlyError(e),
       );
     }
   }
@@ -340,47 +360,73 @@ class WebDavSyncService {
     required String deviceId,
     required String fingerprint,
     required String reportMessage,
+    void Function(double progress)? onProgress,
   }) async {
     final Uint8List archive = await BackupService(_store)
         .buildArchive(scope: BackupScope.full);
     final String archiveHash = HashUtils.ofBytes(archive);
     final DateTime now = DateUtils.nowUtc();
 
-    // Write the payload first, then the metadata. A crash between the two
-    // leaves a snapshot whose hash does not match the sidecar, which the reader
-    // treats as "no metadata" and recovers from — the reverse order would
-    // advertise a snapshot that is not there yet.
-    // 先写数据再写元数据。两步之间崩溃会留下哈希与伴随文件不匹配的快照，
-    // 读取方将其视为「无元数据」并可恢复；反过来则会预告一个尚不存在的快照。
-    await client.write(snapshotPath, archive);
+    // Stream the upload from a temp file rather than handing the in-memory
+    // bytes straight to Dio: the payload is the *whole library* and can be very
+    // large, and a streaming request keeps the HTTP layer from holding a second
+    // copy while it sends.
+    // 经临时文件流式上传，而不是把内存字节直接交给 Dio：
+    // 载荷是**整个库**、可能非常大，流式请求可避免 HTTP 层发送时再持有一份拷贝。
+    final String tempDir = await PathUtils.tempPath();
+    final String tempPath =
+        '$tempDir/sync_push_${DateUtils.fileStamp(now)}.zip';
+    final File temp = File(tempPath);
+    await temp.writeAsBytes(archive, flush: true);
 
-    final Map<String, dynamic> sidecar = <String, dynamic>{
-      'schemaVersion': 1,
-      'fingerprint': fingerprint,
-      'archiveHash': archiveHash,
-      'updatedAt': DateUtils.toIso(now),
-      'deviceId': deviceId,
-    };
-    await client.write(
-      metaPath,
-      Uint8List.fromList(utf8.encode(jsonEncode(sidecar))),
-    );
+    try {
+      AppLog.info('开始上传备份（${archive.length} 字节）');
+      await client.writeFromFile(
+        tempPath,
+        snapshotPath,
+        onProgress: (int count, int total) {
+          if (total > 0) onProgress?.call((count / total) * 0.85);
+        },
+      );
 
-    _store.writeSyncMeta(
-      _store.readSyncMeta().copyWith(
-            deviceId: deviceId,
-            lastSyncAt: now,
-            lastUploadedManifestHash: fingerprint,
-            lastKnownRemoteHash: fingerprint,
-            conflictIds: const <String>[],
-          ),
-    );
+      final Map<String, dynamic> sidecar = <String, dynamic>{
+        'schemaVersion': 1,
+        'fingerprint': fingerprint,
+        'archiveHash': archiveHash,
+        'updatedAt': DateUtils.toIso(now),
+        'deviceId': deviceId,
+      };
+      await client.write(
+        metaPath,
+        Uint8List.fromList(utf8.encode(jsonEncode(sidecar))),
+      );
+      onProgress?.call(0.95);
 
-    return SyncReport(
-      outcome: SyncOutcome.pushed,
-      message: reportMessage,
-      at: now,
-    );
+      _store.writeSyncMeta(
+        _store.readSyncMeta().copyWith(
+              deviceId: deviceId,
+              lastSyncAt: now,
+              lastUploadedManifestHash: fingerprint,
+              lastKnownRemoteHash: fingerprint,
+              conflictIds: const <String>[],
+            ),
+      );
+
+      onProgress?.call(1.0);
+      AppLog.info('备份上传完成（${archive.length} 字节）');
+      return SyncReport(
+        outcome: SyncOutcome.pushed,
+        message: reportMessage,
+        at: now,
+      );
+    } finally {
+      try {
+        if (await temp.exists()) await temp.delete();
+      } catch (_) {
+        // Best effort only.
+        // 尽力而为。
+      }
+    }
   }
 
   /// Download the remote snapshot and replace the local library with it.
@@ -390,11 +436,21 @@ class WebDavSyncService {
     required String snapshotPath,
     required String deviceId,
     required _RemoteMeta remote,
+    void Function(double progress)? onProgress,
   }) async {
-    final List<int> raw = await client.read(snapshotPath);
+    onProgress?.call(0.05);
+    final List<int> raw = await client.read(
+      snapshotPath,
+      onProgress: (int count, int total) {
+        // Download occupies 5%–65% of the overall pull progress.
+        // 下载占拉取总进度的 5%–65%。
+        if (total > 0) onProgress?.call(0.05 + (count / total) * 0.6);
+      },
+    );
     if (raw.isEmpty) {
       throw SyncException('服务器上的快照是空的');
     }
+    onProgress?.call(0.7);
 
     // Download to a temp file rather than holding it only in memory: a full
     // library archive can be tens of MB, and the restore path already takes a
@@ -431,6 +487,7 @@ class WebDavSyncService {
         at: now,
       );
     } finally {
+      onProgress?.call(1.0);
       // Always clean up, including on failure: leaving a multi-MB temp file
       // behind on every failed sync would quietly fill the device.
       // 无论成功失败都清理：每次同步失败都遗留数 MB 临时文件会悄悄占满设备。
@@ -495,13 +552,20 @@ class WebDavSyncService {
       client.auth = webdav.BasicAuth(user: c.username, pwd: c.password);
     }
 
-    // Explicit timeouts: the library's defaults are long enough that a wrong
-    // host would make the UI appear to hang rather than report a failure.
-    // 显式超时：该库的默认值长到足以让错误的主机地址表现为界面卡死，
-    // 而不是报告失败。
+    // Explicit timeouts. Send/receive must accommodate a *full-library* backup:
+    // as the library grows the snapshot can reach tens or hundreds of MB, and a
+    // slow uplink (e.g. 坚果云) can easily take minutes to push it. A 60 s send
+    // timeout turned into the "Sending timeout[60000ms]" failure once libraries
+    // grew; 10 minutes covers multi-hundred-MB uploads on modest connections
+    // while a wrong host still fails fast on the 15 s connect timeout.
+    //
+    // 显式超时。发送/接收必须容纳**整库**备份：库变大后快照可达数十甚至上百 MB，
+    // 在较慢的上行（如坚果云）上推送可能要数分钟。库变大后 60 秒发送超时就成了
+    // 「Sending timeout[60000ms]」失败的元凶；10 分钟足以在普通网络上传
+    // 数百 MB，而错误的主机地址仍会在 15 秒连接超时上快速失败。
     client.setConnectTimeout(15000);
-    client.setSendTimeout(60000);
-    client.setReceiveTimeout(60000);
+    client.setSendTimeout(600000);
+    client.setReceiveTimeout(600000);
     return client;
   }
 
@@ -526,7 +590,11 @@ class WebDavSyncService {
 
   /// Turn library exceptions and socket errors into something a user can act on.
   /// 将库异常与套接字错误转为用户可据以行动的信息。
-  static String _friendlyError(Object error) {
+  ///
+  /// Public so the controller's outer catch (which must never leak a raw
+  /// multi-line Dio stack trace into the UI) can reuse the same mapping.
+  /// 公开供控制器的最外层捕获复用——那里绝不能把原始多行 Dio 堆栈泄漏到界面。
+  static String friendlyError(Object error) {
     if (error is AppException) return error.message;
     final String text = error.toString();
     if (text.contains('401') || text.contains('Unauthorized')) {
@@ -536,6 +604,20 @@ class WebDavSyncService {
     }
     if (text.contains('404')) {
       return '服务器路径不存在，请检查地址是否正确';
+    }
+    // Timeouts get their own wording: with a growing library these mean "the
+    // backup is big and the network slow", not "wrong address" — the generic
+    // connection message would mislead, and the raw DioError would otherwise
+    // dump a multi-line stack trace into the card.
+    // 超时单独措辞：库变大后它意味着「备份大、网络慢」，而非「地址错误」——
+    // 通用的连接提示会误导，且原始 DioError 会把多行堆栈直接刷进卡片。
+    if (text.contains('sendTimeout') || text.contains('Sending timeout')) {
+      return '上传超时：备份较大而网络较慢，'
+          '请换更快的网络后重试，或稍后再试';
+    }
+    if (text.contains('receiveTimeout') ||
+        text.contains('Receiving timeout')) {
+      return '下载超时：请检查网络后重试';
     }
     if (text.contains('SocketException') ||
         text.contains('Connection') ||

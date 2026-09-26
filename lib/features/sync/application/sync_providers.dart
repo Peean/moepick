@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/logging/app_log.dart';
 import '../../../core/state/data_version.dart';
 import '../../../core/storage/hive_store.dart';
 import '../../../core/storage/secure_store.dart';
@@ -109,8 +110,13 @@ class SyncController extends Notifier<SyncStatus> {
       final WebDavCredentials credentials =
           await ref.read(webDavCredentialsProvider.future);
       final HiveStore store = ref.read(hiveStoreProvider);
-      final SyncReport report =
-          await WebDavSyncService(store).sync(credentials);
+      final SyncReport report = await WebDavSyncService(store).sync(
+        credentials,
+        onProgress: (double progress) {
+          if (_disposed || !_running) return;
+          state = SyncStatus.running(progress: progress);
+        },
+      );
 
       // The engine mutates sync metadata directly; re-read it so the UI shows
       // the new timestamp instead of the pre-sync value.
@@ -120,9 +126,15 @@ class SyncController extends Notifier<SyncStatus> {
       state = SyncStatus.done(report);
       return report;
     } catch (e) {
+      // The engine catches its own failures; reaching here means something
+      // escaped it, so log it and surface a *readable* message rather than a
+      // raw multi-line Dio stack trace.
+      // 引擎会自行捕获失败；走到这里说明有异常漏出，记入日志并以可读文案呈现，
+      // 而不是把原始多行 Dio 堆栈刷到界面上。
+      AppLog.error('同步调用链失败', error: e);
       final SyncReport report = SyncReport(
         outcome: SyncOutcome.failed,
-        message: '$e',
+        message: WebDavSyncService.friendlyError(e),
       );
       state = SyncStatus.done(report);
       return report;
@@ -180,16 +192,22 @@ class SyncStatus {
   const SyncStatus._({
     required this.isRunning,
     this.report,
+    this.progress,
   });
 
   const SyncStatus.idle() : this._(isRunning: false);
 
-  const SyncStatus.running() : this._(isRunning: true);
+  const SyncStatus.running({double? progress})
+      : this._(isRunning: true, progress: progress);
 
   const SyncStatus.done(SyncReport report)
       : this._(isRunning: false, report: report);
 
   final bool isRunning;
+
+  /// Coarse 0.0–1.0 progress of the running operation, when known.
+  /// 进行中操作的粗粒度 0.0–1.0 进度（若可知）。
+  final double? progress;
 
   /// The most recent completed run, if any.
   /// 最近一次已完成的运行结果（若有）。
