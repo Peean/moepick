@@ -316,6 +316,26 @@ class ImportProcessResult {
   final String thumbExtension;
 }
 
+/// Whether [image] contains any transparency.
+/// 判断 [image] 是否含透明像素。
+///
+/// `Image.hasAlpha` only checks the channel count (2 or 4), so it misses
+/// palette-based formats: a GIF decodes to `numChannels == 1` with the
+/// transparent colour stored in the palette. We also scan the palette for any
+/// colour with alpha < 255.
+/// `Image.hasAlpha` 只检查通道数（2 或 4），会漏掉基于调色板的格式：GIF 解码为
+/// `numChannels == 1`，透明色存在调色板里。这里额外扫描调色板中 alpha < 255 的颜色。
+bool _hasTransparency(img.Image image) {
+  if (image.hasAlpha) return true;
+  final img.Palette? palette = image.palette;
+  if (palette != null) {
+    for (int i = 0; i < palette.numColors; i++) {
+      if (palette.getAlpha(i) < 255) return true;
+    }
+  }
+  return false;
+}
+
 /// Top-level isolate worker for a single imported image: hash, measure and
 /// thumbnail in one pass.
 /// 单张导入图片的顶层 isolate 工作函数：一次性完成哈希、取尺寸与缩略图。
@@ -340,7 +360,12 @@ ImportProcessResult processImportImage(ImportProcessRequest request) {
   String thumbExtension = '.jpg';
 
   try {
-    final img.Image? decoded = img.decodeImage(request.bytes);
+    // frame: 0 decodes only the first frame. This matters hugely for animated
+    // GIFs: the default decode path walks *every* frame, so a 20-image batch of
+    // animated stickers would decode hundreds of frames and take ~a minute.
+    // frame: 0 只解码第一帧。这对动图 GIF 至关重要：默认解码会遍历**每一帧**，
+    // 20 张动图表情包就要解码数百帧、耗时近一分钟。
+    final img.Image? decoded = img.decodeImage(request.bytes, frame: 0);
     if (decoded != null) {
       width = decoded.width;
       height = decoded.height;
@@ -365,7 +390,7 @@ ImportProcessResult processImportImage(ImportProcessRequest request) {
       // background the user expects.
       // JPEG 会丢弃 alpha 通道（透明像素变黑），因此带透明的图片必须用 PNG 缩略图，
       // 以保留用户期望的透明背景。
-      if (decoded.hasAlpha) {
+      if (_hasTransparency(decoded)) {
         thumb = Uint8List.fromList(img.encodePng(resized));
         thumbExtension = '.png';
       } else {

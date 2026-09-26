@@ -19,7 +19,7 @@ class AppConstants {
   /// hand: pulling it from the platform channel would be overkill for a label.
   /// 关于页展示的版本号。与 pubspec 手工同步：
   /// 为了一个标签去走平台通道得不偿失。
-  static const String appVersion = '1.1.3';
+  static const String appVersion = '1.1.4';
 
   /// Backup schema version understood by this build.
   /// 本版本可识别的备份 schema 版本。
