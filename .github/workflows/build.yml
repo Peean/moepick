@@ -1,9 +1,8 @@
 name: build
 
-# 全平台构建 + 发布：
-# - 推送到 main：三平台构建，产物上传为 artifact（可在 Actions 页面下载）
-# - 打 v* 标签：额外创建 GitHub Release 并上传三平台产物
-# - 手动：Actions 页面「Run workflow」
+# 全平台构建：Android APK、Linux 桌面、Windows 桌面。
+# 触发：推送到 main、打 v* 标签，或手动在 Actions 页面点「Run workflow」。
+# 产物上传为 artifact，可在 Actions 页面下载；不自动发 release（避免额外权限）。
 on:
   push:
     branches: [main]
@@ -36,32 +35,14 @@ jobs:
       - name: 安装依赖
         run: flutter pub get
 
-      # 从 GitHub Secrets 还原正式 keystore，保证与本地构建签名一致。
-      # Secrets 未配置时跳过，回退 debug 签名（产物仍可安装，但无法覆盖升级）。
-      - name: 还原签名密钥
-        if: secrets.KEYSTORE_BASE64 != ''
-        shell: bash
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: |
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/moepick-release.jks
-          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=moepick-release.jks\n' \
-            "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
-
       - name: 构建 APK
         run: flutter build apk --release
-
-      - name: 重命名 APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk moepick-android.apk
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: moepick-android
-          path: moepick-android.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
 
   linux:
     name: Linux 桌面
@@ -82,7 +63,7 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgtk-3-dev libsecret-1-dev zip
+          sudo apt-get install -y ninja-build libgtk-3-dev libsecret-1-dev
 
       - name: 安装依赖
         run: flutter pub get
@@ -90,16 +71,11 @@ jobs:
       - name: 构建 Linux 桌面
         run: flutter build linux --release
 
-      - name: 打包 Linux 产物
-        run: |
-          cd build/linux/x64/release
-          zip -r moepick-linux-x64.zip bundle
-
       - name: 上传 Linux 产物
         uses: actions/upload-artifact@v4
         with:
           name: moepick-linux
-          path: build/linux/x64/release/moepick-linux-x64.zip
+          path: build/linux/x64/release/bundle
 
   windows:
     name: Windows 桌面
@@ -123,53 +99,13 @@ jobs:
         run: flutter pub get
 
       # windows-2022 runner 预装 Visual Studio 2022 + C++ 桌面工作负载。
-      # 注意：Flutter 3.7 的产物路径是 build/windows/runner/Release（无 x64 层）。
+      # 注意：Flutter 3.7 的产物路径是 build/windows/runner/Release（无 x64 层），
+      # 与 Flutter 3.0 的 build/windows/x64/runner/Release 不同。
       - name: 构建 Windows 桌面
         run: flutter build windows --release
-
-      - name: 打包 Windows 产物
-        shell: pwsh
-        run: |
-          Compress-Archive -Path build/windows/runner/Release/* -DestinationPath moepick-windows-x64.zip
 
       - name: 上传 Windows 产物
         uses: actions/upload-artifact@v4
         with:
           name: moepick-windows
-          path: moepick-windows-x64.zip
-
-  # 仅在打 v* 标签时运行：汇总三平台产物，创建 GitHub Release 并上传。
-  release:
-    name: 发布 Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [android, linux, windows]
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    steps:
-      - name: 下载 Android 产物
-        uses: actions/download-artifact@v4
-        with:
-          name: moepick-android
-          path: release-assets
-
-      - name: 下载 Linux 产物
-        uses: actions/download-artifact@v4
-        with:
-          name: moepick-linux
-          path: release-assets
-
-      - name: 下载 Windows 产物
-        uses: actions/download-artifact@v4
-        with:
-          name: moepick-windows
-          path: release-assets
-
-      - name: 创建 Release 并上传产物
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          files: release-assets/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: build/windows/runner/Release
