@@ -605,6 +605,22 @@ class WebDavSyncService {
     if (text.contains('404')) {
       return '服务器路径不存在，请检查地址是否正确';
     }
+    // "Connection reset by peer" / "Reset by Origin Server" happen when the
+    // server (or a reverse proxy in front of it) drops the upload mid-stream —
+    // the classic cause is a 60 s body/proxy timeout on a large snapshot. This
+    // must not be reported as "cannot connect": the connection *was* fine.
+    // 「Connection reset by peer」/「Reset by Origin Server」发生在服务器（或其前
+    // 的反向代理）在上传中途断开连接时——典型原因是快照过大触发了 60 秒的
+    // body/proxy 超时。这绝不能报成「无法连接」：连接本身是通的。
+    if (text.contains('Connection reset') ||
+        text.contains('reset by peer') ||
+        text.contains('Reset by Origin Server') ||
+        text.contains('HttpException')) {
+      return '上传中断：服务器在上传过程中断开了连接，'
+          '通常是服务器对大文件有时间/大小限制。\n'
+          '请在服务器端调大上传限制与超时（nginx 的 '
+          'client_max_body_size、client_body_timeout、proxy_read_timeout）。';
+    }
     // Timeouts get their own wording: with a growing library these mean "the
     // backup is big and the network slow", not "wrong address" — the generic
     // connection message would mislead, and the raw DioError would otherwise
